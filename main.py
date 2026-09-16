@@ -3,6 +3,7 @@ the same process, using python-telegram-bot's built-in job queue (so there's
 no need for a second scheduler library running alongside it).
 """
 import logging
+from datetime import datetime, timezone
 
 from bot.telegram_bot import build_app, notify_job
 from config import SCAN_INTERVAL_SECONDS
@@ -15,11 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 async def scan_job(context) -> None:
+    state.set_meta("last_scan_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
     try:
         jobs = fetch_jobs()
     except Exception:
         logger.exception("Failed to fetch Useme feed")
+        state.set_meta("last_scan_ok", "0")
         return
+    state.set_meta("last_scan_ok", "1")
 
     new_count = 0
     for job in jobs:
@@ -39,12 +44,14 @@ async def scan_job(context) -> None:
         else:
             state.set_status(job.job_id, "rejected_auto")
 
+    state.set_meta("last_scan_new_count", str(new_count))
     if new_count:
         logger.info("Scan done: %d new listing(s) processed", new_count)
 
 
 def main() -> None:
     app = build_app()
+    state.set_meta("bot_started_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
     app.job_queue.run_repeating(scan_job, interval=SCAN_INTERVAL_SECONDS, first=5)
     logger.info("Starting bot, scanning every %ds", SCAN_INTERVAL_SECONDS)
     app.run_polling()

@@ -10,10 +10,17 @@ CREATE TABLE IF NOT EXISTS jobs (
     job_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     url TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'seen',  -- seen | notified | approved | rejected | sent | failed
+    status TEXT NOT NULL DEFAULT 'seen',  -- seen | notified | approved | rejected | rejected_auto | sent | failed
     draft_offer TEXT,
     first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Small key/value store for bot-wide facts (last scan time, uptime, ...)
+-- that don't belong to any single job.
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 """
 
@@ -23,7 +30,7 @@ def connect():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute(SCHEMA)
+        conn.executescript(SCHEMA)
         yield conn
         conn.commit()
     finally:
@@ -61,3 +68,29 @@ def set_status(job_id: str, status: str, draft_offer: str | None = None):
 def get_job(job_id: str) -> sqlite3.Row | None:
     with connect() as conn:
         return conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+
+
+def set_meta(key: str, value: str):
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+
+
+def get_meta(key: str) -> str | None:
+    with connect() as conn:
+        row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+
+def status_counts() -> dict[str, int]:
+    with connect() as conn:
+        rows = conn.execute("SELECT status, COUNT(*) AS c FROM jobs GROUP BY status").fetchall()
+        return {r["status"]: r["c"] for r in rows}
+
+
+def total_jobs() -> int:
+    with connect() as conn:
+        return conn.execute("SELECT COUNT(*) AS c FROM jobs").fetchone()["c"]

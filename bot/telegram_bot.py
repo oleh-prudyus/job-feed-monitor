@@ -10,23 +10,52 @@ Flow per new matching job:
 """
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    CommandHandler,
     ContextTypes,
     MessageHandler,
     filters,
 )
 
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config import SCAN_INTERVAL_SECONDS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from db import state
 
 logger = logging.getLogger(__name__)
 
 # job_id of the listing currently awaiting replacement text via /edit, if any.
 _awaiting_edit: str | None = None
+
+# status -> (emoji, human label), shown in /status in this order.
+_STATUS_LABELS = {
+    "notified": ("⏳", "Очікують рішення"),
+    "approved": ("👍", "Схвалено (надсилається)"),
+    "sent": ("📨", "Офер надіслано"),
+    "failed": ("⚠️", "Не вдалося надіслати"),
+    "rejected": ("🙅", "Відхилено вручну"),
+    "rejected_auto": ("🤖", "Відхилено автоматично (LLM)"),
+    "seen": ("👀", "Побачено, ще не оцінено"),
+}
+
+
+def _time_ago(iso: str) -> str:
+    dt = datetime.fromisoformat(iso)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    seconds = int((datetime.now(timezone.utc) - dt).total_seconds())
+    if seconds < 60:
+        return "щойно"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} хв тому"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} год тому"
+    return f"{hours // 24} дн тому"
 
 
 def _keyboard(job_id: str) -> InlineKeyboardMarkup:
@@ -117,8 +146,38 @@ async def _on_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(f"Не вдалося надіслати офер: {exc}")
 
 
+async def _on_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    started_at = state.get_meta("bot_started_at")
+    last_scan_at = state.get_meta("last_scan_at")
+    last_scan_ok = state.get_meta("last_scan_ok")
+    new_count = state.get_meta("last_scan_new_count") or "0"
+    counts = state.status_counts()
+    total = state.total_jobs()
+
+    lines = ["<b>📊 Статус бота</b>", ""]
+
+    lines.append(f"🟢 Працює з: {_time_ago(started_at) if started_at else 'щойно запущено'}")
+    if last_scan_at:
+        scan_mark = "🕐" if last_scan_ok != "0" else "❗️"
+        lines.append(f"{scan_mark} Останнє сканування: {_time_ago(last_scan_at)}")
+        lines.append(f"🆕 Нових вакансій за той прохід: {new_count}")
+    else:
+        lines.append("🕐 Сканування ще не запускалось")
+    lines.append(f"⏭ Наступне — приблизно через {SCAN_INTERVAL_SECONDS // 60} хв")
+
+    lines.append("")
+    lines.append(f"<b>📈 Усього переглянуто вакансій: {total}</b>")
+    for status, (emoji, label) in _STATUS_LABELS.items():
+        count = counts.get(status, 0)
+        if count:
+            lines.append(f"{emoji} {label}: {count}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
+
+
 def build_app() -> Application:
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(CommandHandler("status", _on_status))
     app.add_handler(CallbackQueryHandler(_on_button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_edit_text))
     return app
