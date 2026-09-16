@@ -13,9 +13,11 @@ Internal tracker, not part of the public README.
 - [x] `main.py` — оркестрація: job_queue python-telegram-bot (без окремого APScheduler) + запуск бота
 - [x] Docker-образ (`docker/Dockerfile`, base з preinstalled Chromium) + `docker-compose.yml`
 
+- [x] `submitter/useme_submitter.py::submit_offer()` — реалізовано (Playwright, .type() для contenteditable-редактора)
+- [x] Сесія отримана через експорт кукі з браузерного плагіна (простіше за `save_session.py`) + конвертер `scripts/cookies_to_storage_state.py`
+- [x] Задеплоєно на VPS 157.90.248.102 (`~/useme_bot`, окремий stack, порти не займає) — контейнер живий, сканує кожні 15 хв, БД персистить між рестартами
+
 ## Remaining
-- [ ] `submitter/useme_submitter.py::submit_offer()` — TODO, пише Олег
-- [ ] `scripts/save_session.py` — прогнати локально, отримати `storage_state.json`
-- [ ] Задеплоїти на VPS 157.90.248.102 (окремий stack поруч з immigration-case-manager, порти не займає)
-- [ ] Перший реальний тест: одна вакансія від сканування до відправки офера
+- [ ] Перший реальний тест: підтвердити офер через Telegram-кнопку "Схвалити" на живій вакансії — перевірити, чи `submit_offer()` і кнопка Summary-кроку (селектор не підтверджено наосліп, дивись коментар у коді) справді працюють
+- [ ] Коли сесія (кукі) протухне — повторити експорт з плагіна й прогнати `cookies_to_storage_state.py` заново
 - [ ] (опційно, пізніше) Freelancer.com як другий майданчик
