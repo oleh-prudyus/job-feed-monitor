@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import requests
 from bs4 import BeautifulSoup
 
+from config import proxy_url
+
 JOBS_URL = "https://useme.com/en/jobs/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
@@ -32,7 +34,9 @@ def _extract_job_id(url: str) -> str:
 
 
 def fetch_jobs(url: str = JOBS_URL) -> list[JobListing]:
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=20)
+    proxy = proxy_url()
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, proxies=proxies, timeout=20)
     resp.raise_for_status()
     return parse_jobs(resp.text)
 
