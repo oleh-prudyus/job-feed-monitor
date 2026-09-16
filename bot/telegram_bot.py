@@ -8,6 +8,7 @@ Flow per new matching job:
 4. Edit     -> bot asks for replacement text; next plain-text message from
    Oleh becomes the new draft_offer and is treated as an approval.
 """
+import asyncio
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -72,7 +73,7 @@ async def _on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         from submitter.useme_submitter import submit_offer
 
         try:
-            submit_offer(job_id, job["url"], job["draft_offer"])
+            await asyncio.to_thread(submit_offer, job_id, job["url"], job["draft_offer"])
             state.set_status(job_id, "sent")
             await query.message.reply_text("Офер надіслано.")
         except Exception as exc:  # submission is best-effort; never crash the bot
@@ -107,7 +108,7 @@ async def _on_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     from submitter.useme_submitter import submit_offer
 
     try:
-        submit_offer(job_id, job["url"], new_text)
+        await asyncio.to_thread(submit_offer, job_id, job["url"], new_text)
         state.set_status(job_id, "sent")
         await update.message.reply_text("Офер надіслано.")
     except Exception as exc:
