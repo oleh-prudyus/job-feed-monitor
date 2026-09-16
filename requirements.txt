@@ -1,8 +1,7 @@
 requests
 beautifulsoup4
-python-telegram-bot
-apscheduler
+python-telegram-bot[job-queue]
 anthropic
 openai
 python-dotenv
-playwright
+playwright==1.47.0

@@ -31,6 +31,24 @@ python3 scripts/save_session.py   # локально, з реальним бра
 # скопіюй storage_state.json на сервер, у папку бота
 ```
 
+## Деплой на VPS (Docker)
+
+```bash
+# на сервері, поруч з іншими проєктами
+git clone <repo> useme_bot && cd useme_bot
+cp .env.example .env && nano .env   # заповни токени/ключі
+chmod 600 .env
+
+# storage_state.json генерується локально (scripts/save_session.py)
+# і копіюється сюди окремо (scp), в git НЕ комітиться
+
+docker compose up -d --build
+docker compose logs -f
+```
+
+Бот не займає жодного порту (Telegram-бот працює через вихідне long polling),
+тож не конфліктує з Caddy чи іншими сервісами на сервері.
+
 ## Чому без автологіну
 
 `/en/login/` на Useme захищений Cloudflare-перевіркою на бот-трафік.

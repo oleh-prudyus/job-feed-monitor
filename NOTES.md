@@ -10,10 +10,12 @@ Internal tracker, not part of the public README.
 - [x] Дизайн-рішення: без автологіну (Cloudflare на /login/) — ручна сесія через `scripts/save_session.py`
 - [x] Форма офера на Useme розібрана (селектори полів задокументовані в submitter TODO)
 
+- [x] `main.py` — оркестрація: job_queue python-telegram-bot (без окремого APScheduler) + запуск бота
+- [x] Docker-образ (`docker/Dockerfile`, base з preinstalled Chromium) + `docker-compose.yml`
+
 ## Remaining
 - [ ] `submitter/useme_submitter.py::submit_offer()` — TODO, пише Олег
-- [ ] `main.py` — оркестрація: scan loop (APScheduler) + запуск Telegram app разом
-- [ ] Docker-образ + docker-compose.yml для деплою на VPS (157.90.248.102, окремий stack поруч з immigration-case-manager)
-- [ ] systemd/compose restart policy, логи
+- [ ] `scripts/save_session.py` — прогнати локально, отримати `storage_state.json`
+- [ ] Задеплоїти на VPS 157.90.248.102 (окремий stack поруч з immigration-case-manager, порти не займає)
 - [ ] Перший реальний тест: одна вакансія від сканування до відправки офера
 - [ ] (опційно, пізніше) Freelancer.com як другий майданчик

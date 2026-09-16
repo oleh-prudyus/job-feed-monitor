@@ -1,0 +1,11 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: useme-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./db:/app/db
+      - ./storage_state.json:/app/storage_state.json:ro
