@@ -1,0 +1,39 @@
+# useme_bot
+
+Моніторить публічну стрічку вакансій на useme.com, оцінює кожну нову вакансію
+LLM-ом за особистими критеріями відсіву, і надсилає збіги в Telegram з
+чернеткою офера. Після схвалення (кнопкою в Telegram) бот сам заповнює й
+надсилає офер на Useme, використовуючи заздалегідь збережену сесію логіну.
+
+## Компоненти
+
+```
+scraper/useme_scraper.py     Парсинг публічної стрічки /en/jobs/ (requests + BeautifulSoup)
+evaluator/llm_evaluator.py   Оцінка вакансії + чернетка офера через Claude/OpenAI
+evaluator/criteria.py        Критерії відсіву/прийняття (окремо від промпту)
+db/state.py                  SQLite: які вакансії вже бачені/оброблені
+bot/telegram_bot.py          Сповіщення + кнопки Схвалити/Редагувати/Відхилити
+submitter/useme_submitter.py Заповнення й відправка форми офера (Playwright)
+scripts/save_session.py      Одноразовий ручний логін -> storage_state.json
+```
+
+## Швидкий старт
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+playwright install chromium
+
+cp .env.example .env
+# заповни TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ANTHROPIC_API_KEY або OPENAI_API_KEY
+
+python3 scripts/save_session.py   # локально, з реальним браузером — один раз
+# скопіюй storage_state.json на сервер, у папку бота
+```
+
+## Чому без автологіну
+
+`/en/login/` на Useme захищений Cloudflare-перевіркою на бот-трафік.
+Замість того, щоб намагатись її обходити, бот перевикористовує сесію, яку ти
+створюєш вручну (`scripts/save_session.py`). Коли сесія протухає — бот
+повідомляє в Telegram, і ти повторюєш цей крок.
