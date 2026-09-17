@@ -14,6 +14,12 @@ from config import proxy_url
 JOBS_URL = "https://useme.com/en/jobs/category/programming-i-it,2/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
+# Only page 1 ("newest" sort) used to be fetched -- a burst of >20 postings between two
+# scans (30 min apart in the worst case) would push older-but-still-unseen listings off
+# it before the bot ever looked, silently skipping them forever (db.is_known() never
+# gets a chance to record them). Fetching a few pages gives real headroom against that.
+PAGES_TO_FETCH = 3
+
 
 @dataclass
 class JobListing:
@@ -33,12 +39,24 @@ def _extract_job_id(url: str) -> str:
     return match.group(1) if match else url
 
 
-def fetch_jobs(url: str = JOBS_URL) -> list[JobListing]:
+def fetch_jobs(url: str = JOBS_URL, pages: int = PAGES_TO_FETCH) -> list[JobListing]:
     proxy = proxy_url()
     proxies = {"http": proxy, "https": proxy} if proxy else None
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, proxies=proxies, timeout=20)
-    resp.raise_for_status()
-    return parse_jobs(resp.text)
+
+    listings: list[JobListing] = []
+    seen_ids: set[str] = set()
+    for page_num in range(1, pages + 1):
+        page_url = url if page_num == 1 else f"{url}?page={page_num}"
+        resp = requests.get(page_url, headers={"User-Agent": USER_AGENT}, proxies=proxies, timeout=20)
+        resp.raise_for_status()
+        page_listings = parse_jobs(resp.text)
+        if not page_listings:
+            break  # ran past the last page
+        for job in page_listings:
+            if job.job_id not in seen_ids:
+                seen_ids.add(job.job_id)
+                listings.append(job)
+    return listings
 
 
 def parse_jobs(html: str) -> list[JobListing]:
