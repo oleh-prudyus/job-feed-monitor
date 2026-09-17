@@ -30,3 +30,14 @@ def proxy_url() -> str | None:
         return None
     auth = f"{PROXY_USERNAME}:{PROXY_PASSWORD}@" if PROXY_USERNAME else ""
     return f"http://{auth}{PROXY_HOST}:{PROXY_PORT}"
+
+
+def playwright_proxy() -> dict | None:
+    """Playwright wants host/user/pass as separate fields, not one URL."""
+    if not PROXY_HOST:
+        return None
+    proxy = {"server": f"http://{PROXY_HOST}:{PROXY_PORT}"}
+    if PROXY_USERNAME:
+        proxy["username"] = PROXY_USERNAME
+        proxy["password"] = PROXY_PASSWORD
+    return proxy

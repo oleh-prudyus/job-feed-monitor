@@ -1,15 +1,25 @@
 """Fetches the public Useme job feed and parses listings into structured dicts.
 
-No login required — /en/jobs/ is a public page, so this is a plain HTML fetch,
-not browser automation.
+Page 1 of a category feed is a plain, unauthenticated HTML page and loads fine
+via `requests`. But paginated URLs (?page=2, ?page=3, ...) consistently get a
+Cloudflare "Just a moment..." JS challenge (403) when hit with a bare HTTP
+client -- confirmed by hand, not rate-limit-related (still blocked after a
+15+ min gap). A real browser is required to clear that challenge, so
+pagination goes through Playwright (same approach submitter/ already uses for
+the Cloudflare-protected /login/ page) while page 1 alone still uses the
+cheaper plain `requests` path.
 """
+import logging
 import re
 from dataclasses import dataclass
 
 import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
-from config import proxy_url
+from config import playwright_proxy, proxy_url
+
+logger = logging.getLogger(__name__)
 
 JOBS_URL = "https://useme.com/en/jobs/category/programming-i-it,2/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -19,6 +29,10 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 # it before the bot ever looked, silently skipping them forever (db.is_known() never
 # gets a chance to record them). Fetching a few pages gives real headroom against that.
 PAGES_TO_FETCH = 3
+
+# How long to give the Cloudflare interstitial to resolve and redirect to the real
+# page before giving up on a given pagination request, in milliseconds.
+CHALLENGE_TIMEOUT_MS = 15_000
 
 
 @dataclass
@@ -39,20 +53,48 @@ def _extract_job_id(url: str) -> str:
     return match.group(1) if match else url
 
 
-def fetch_jobs(url: str = JOBS_URL, pages: int = PAGES_TO_FETCH) -> list[JobListing]:
+def _fetch_page1_html(url: str) -> str:
     proxy = proxy_url()
     proxies = {"http": proxy, "https": proxy} if proxy else None
+    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, proxies=proxies, timeout=20)
+    resp.raise_for_status()
+    return resp.text
+
+
+def _fetch_pages_2plus_html(url: str, pages: int) -> list[str]:
+    """Pages 2..pages via a real (headless) browser -- see module docstring for why."""
+    if pages < 2:
+        return []
+
+    html_by_page = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, proxy=playwright_proxy())
+        try:
+            page = browser.new_page(user_agent=USER_AGENT)
+            for page_num in range(2, pages + 1):
+                page.goto(f"{url}?page={page_num}", timeout=CHALLENGE_TIMEOUT_MS)
+                # The Cloudflare interstitial replaces itself with the real page via JS once
+                # it resolves; wait for a real listing to show up (or time out if this page
+                # genuinely has none, e.g. we've paged past the last one).
+                try:
+                    page.wait_for_selector("article.job", timeout=CHALLENGE_TIMEOUT_MS)
+                except Exception:
+                    logger.warning("Page %d: no listings appeared (Cloudflare challenge or last page)", page_num)
+                    break
+                html_by_page.append(page.content())
+        finally:
+            browser.close()
+    return html_by_page
+
+
+def fetch_jobs(url: str = JOBS_URL, pages: int = PAGES_TO_FETCH) -> list[JobListing]:
+    all_html = [_fetch_page1_html(url)]
+    all_html.extend(_fetch_pages_2plus_html(url, pages))
 
     listings: list[JobListing] = []
     seen_ids: set[str] = set()
-    for page_num in range(1, pages + 1):
-        page_url = url if page_num == 1 else f"{url}?page={page_num}"
-        resp = requests.get(page_url, headers={"User-Agent": USER_AGENT}, proxies=proxies, timeout=20)
-        resp.raise_for_status()
-        page_listings = parse_jobs(resp.text)
-        if not page_listings:
-            break  # ran past the last page
-        for job in page_listings:
+    for html in all_html:
+        for job in parse_jobs(html):
             if job.job_id not in seen_ids:
                 seen_ids.add(job.job_id)
                 listings.append(job)

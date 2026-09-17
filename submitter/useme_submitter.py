@@ -22,22 +22,11 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from config import PROXY_HOST, PROXY_PASSWORD, PROXY_PORT, PROXY_USERNAME
+from config import playwright_proxy
 
 logger = logging.getLogger(__name__)
 
 SESSION_PATH = Path(__file__).parent.parent / "storage_state.json"
-
-
-def _playwright_proxy() -> dict | None:
-    """Playwright wants host/user/pass as separate fields, not one URL."""
-    if not PROXY_HOST:
-        return None
-    proxy = {"server": f"http://{PROXY_HOST}:{PROXY_PORT}"}
-    if PROXY_USERNAME:
-        proxy["username"] = PROXY_USERNAME
-        proxy["password"] = PROXY_PASSWORD
-    return proxy
 
 
 def submit_offer(
@@ -64,7 +53,7 @@ def submit_offer(
     offer_url = f"https://useme.com/en/jobs/{job_id}/offer/start/"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, proxy=_playwright_proxy())
+        browser = p.chromium.launch(headless=True, proxy=playwright_proxy())
         context = browser.new_context(storage_state=str(SESSION_PATH))
         page = context.new_page()
 
