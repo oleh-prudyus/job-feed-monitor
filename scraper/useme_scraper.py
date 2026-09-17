@@ -11,11 +11,13 @@ cheaper plain `requests` path.
 
 Navigating Playwright directly to "?page=N" isn't enough, though -- confirmed
 by hand that it returns byte-identical content to page 1 (same job IDs, same
-order). The listing grid is populated client-side and only refetches when the
-real pagination link is *clicked*; a fresh page load doesn't trigger that
-fetch. So pagination loads page 1 in the browser once, then clicks the "2",
-"3", ... links in sequence, waiting after each click for the first listing to
-actually change before grabbing the HTML.
+order). The pagination links are plain <a href="./?page=N"> (server-rendered,
+not AJAX), but a *direct* page.goto() to that URL still gets served page 1's
+content -- most likely Cloudflare/the origin treating a fresh navigation
+differently from an in-session link click (no referrer, fresh request
+fingerprint). So pagination loads page 1 in the browser once, then clicks the
+"2", "3", ... links in sequence like a real user would, waiting for each
+click's navigation to finish before grabbing the HTML.
 """
 import logging
 import re
@@ -32,11 +34,14 @@ logger = logging.getLogger(__name__)
 JOBS_URL = "https://useme.com/en/jobs/category/programming-i-it,2/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
-# Only page 1 ("newest" sort) used to be fetched -- a burst of >20 postings between two
-# scans (30 min apart in the worst case) would push older-but-still-unseen listings off
-# it before the bot ever looked, silently skipping them forever (db.is_known() never
-# gets a chance to record them). Fetching a few pages gives real headroom against that.
-PAGES_TO_FETCH = 3
+# Pagination (page 2+) is Cloudflare-walled -- confirmed by hand that ?page=2 shows the
+# "Just a moment..." JS challenge and never resolves, whether reached by direct goto() or
+# by clicking the real pagination link from an already-loaded page 1. No combination tried
+# gets past it, so _fetch_pages_2plus_html() below is effectively dead weight above 1 --
+# kept in place in case a future proxy/stealth change makes it worth revisiting, but for
+# now we rely on scanning often (see SCAN_INTERVAL_SECONDS) to keep page 1 alone from
+# missing bursts of new postings, rather than burning ~15-30s per scan on a losing fight.
+PAGES_TO_FETCH = 1
 
 # How long to give the Cloudflare interstitial to resolve and redirect to the real
 # page before giving up on a given pagination request, in milliseconds.
@@ -92,6 +97,15 @@ def _fetch_pages_2plus_html(url: str, pages: int) -> list[str]:
                 logger.warning("Page 1: no listings appeared, aborting pagination")
                 return []
 
+            # The cookie-consent banner (CookieScript) sits on top of the page and swallows
+            # clicks on anything underneath it, including the pagination links -- confirmed
+            # by hand: Playwright's click retries for 30s against "element intercepts pointer
+            # events" and then gives up. Dismiss it once, up front, before any clicking.
+            try:
+                page.locator("#cookiescript_accept").click(timeout=3000)
+            except Exception:
+                pass  # already dismissed, or banner didn't show this time
+
             prev_href = _first_job_href(page)
             for page_num in range(2, pages + 1):
                 link = page.locator(f'a[href*="page={page_num}"]').first
@@ -99,25 +113,25 @@ def _fetch_pages_2plus_html(url: str, pages: int) -> list[str]:
                     logger.warning("Page %d: no pagination link found (last page?)", page_num)
                     break
 
-                link.click()
+                # The click triggers a real navigation (plain <a href>, not AJAX), so wait
+                # for that navigation to finish first -- a wait_for_function evaluated
+                # while navigation is in flight raises "execution context was destroyed",
+                # which would otherwise look identical to "content didn't change".
                 try:
-                    # Wait for the first listing to actually differ from the previous
-                    # page's -- a plain "article.job" wait would pass instantly since
-                    # the (stale) old listings are already on the page.
-                    page.wait_for_function(
-                        """(prevHref) => {
-                            const el = document.querySelector('article.job .job__title-link');
-                            return el && el.getAttribute('href') !== prevHref;
-                        }""",
-                        arg=prev_href,
-                        timeout=CHALLENGE_TIMEOUT_MS,
-                    )
+                    with page.expect_navigation(timeout=CHALLENGE_TIMEOUT_MS):
+                        link.click()
+                    page.wait_for_selector("article.job", timeout=CHALLENGE_TIMEOUT_MS)
                 except Exception:
-                    logger.warning("Page %d: content didn't change after click, stopping", page_num)
+                    logger.warning("Page %d: navigation after click failed or timed out", page_num)
+                    break
+
+                new_href = _first_job_href(page)
+                if new_href == prev_href:
+                    logger.warning("Page %d: content identical to previous page, stopping", page_num)
                     break
 
                 html_by_page.append(page.content())
-                prev_href = _first_job_href(page)
+                prev_href = new_href
         finally:
             browser.close()
     return html_by_page
