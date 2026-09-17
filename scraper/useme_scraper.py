@@ -8,6 +8,14 @@ client -- confirmed by hand, not rate-limit-related (still blocked after a
 pagination goes through Playwright (same approach submitter/ already uses for
 the Cloudflare-protected /login/ page) while page 1 alone still uses the
 cheaper plain `requests` path.
+
+Navigating Playwright directly to "?page=N" isn't enough, though -- confirmed
+by hand that it returns byte-identical content to page 1 (same job IDs, same
+order). The listing grid is populated client-side and only refetches when the
+real pagination link is *clicked*; a fresh page load doesn't trigger that
+fetch. So pagination loads page 1 in the browser once, then clicks the "2",
+"3", ... links in sequence, waiting after each click for the first listing to
+actually change before grabbing the HTML.
 """
 import logging
 import re
@@ -61,8 +69,14 @@ def _fetch_page1_html(url: str) -> str:
     return resp.text
 
 
+def _first_job_href(page) -> str | None:
+    link = page.locator("article.job .job__title-link").first
+    return link.get_attribute("href") if link.count() else None
+
+
 def _fetch_pages_2plus_html(url: str, pages: int) -> list[str]:
-    """Pages 2..pages via a real (headless) browser -- see module docstring for why."""
+    """Pages 2..pages via a real (headless) browser, by clicking pagination links --
+    see module docstring for why a direct page.goto("?page=N") doesn't work."""
     if pages < 2:
         return []
 
@@ -71,17 +85,39 @@ def _fetch_pages_2plus_html(url: str, pages: int) -> list[str]:
         browser = p.chromium.launch(headless=True, proxy=playwright_proxy())
         try:
             page = browser.new_page(user_agent=USER_AGENT)
+            page.goto(url, timeout=CHALLENGE_TIMEOUT_MS)
+            try:
+                page.wait_for_selector("article.job", timeout=CHALLENGE_TIMEOUT_MS)
+            except Exception:
+                logger.warning("Page 1: no listings appeared, aborting pagination")
+                return []
+
+            prev_href = _first_job_href(page)
             for page_num in range(2, pages + 1):
-                page.goto(f"{url}?page={page_num}", timeout=CHALLENGE_TIMEOUT_MS)
-                # The Cloudflare interstitial replaces itself with the real page via JS once
-                # it resolves; wait for a real listing to show up (or time out if this page
-                # genuinely has none, e.g. we've paged past the last one).
-                try:
-                    page.wait_for_selector("article.job", timeout=CHALLENGE_TIMEOUT_MS)
-                except Exception:
-                    logger.warning("Page %d: no listings appeared (Cloudflare challenge or last page)", page_num)
+                link = page.locator(f'a[href*="page={page_num}"]').first
+                if link.count() == 0:
+                    logger.warning("Page %d: no pagination link found (last page?)", page_num)
                     break
+
+                link.click()
+                try:
+                    # Wait for the first listing to actually differ from the previous
+                    # page's -- a plain "article.job" wait would pass instantly since
+                    # the (stale) old listings are already on the page.
+                    page.wait_for_function(
+                        """(prevHref) => {
+                            const el = document.querySelector('article.job .job__title-link');
+                            return el && el.getAttribute('href') !== prevHref;
+                        }""",
+                        arg=prev_href,
+                        timeout=CHALLENGE_TIMEOUT_MS,
+                    )
+                except Exception:
+                    logger.warning("Page %d: content didn't change after click, stopping", page_num)
+                    break
+
                 html_by_page.append(page.content())
+                prev_href = _first_job_href(page)
         finally:
             browser.close()
     return html_by_page
