@@ -2,6 +2,7 @@
 the same process, using python-telegram-bot's built-in job queue (so there's
 no need for a second scheduler library running alongside it).
 """
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -19,7 +20,11 @@ async def scan_job(context) -> None:
     state.set_meta("last_scan_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
 
     try:
-        jobs = fetch_jobs()
+        # fetch_jobs() uses Playwright's sync API (for the Cloudflare-protected pagination
+        # pages) internally, which refuses to run in a thread that already has an asyncio
+        # event loop -- and this whole function runs inside python-telegram-bot's loop.
+        # Running it in a plain worker thread sidesteps that entirely.
+        jobs = await asyncio.to_thread(fetch_jobs)
     except Exception:
         logger.exception("Failed to fetch Useme feed")
         state.set_meta("last_scan_ok", "0")
