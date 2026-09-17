@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     url TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'seen',  -- seen | notified | approved | rejected | rejected_auto | sent | failed
     draft_offer TEXT,
+    reason TEXT,
     first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -31,6 +32,12 @@ def connect():
     conn.row_factory = sqlite3.Row
     try:
         conn.executescript(SCHEMA)
+        # Migration for DBs created before the `reason` column existed --
+        # CREATE TABLE IF NOT EXISTS above doesn't retrofit existing tables.
+        try:
+            conn.execute("ALTER TABLE jobs ADD COLUMN reason TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         yield conn
         conn.commit()
     finally:
@@ -51,17 +58,17 @@ def mark_seen(job_id: str, title: str, url: str, status: str = "seen"):
         )
 
 
-def set_status(job_id: str, status: str, draft_offer: str | None = None):
+def set_status(job_id: str, status: str, draft_offer: str | None = None, reason: str | None = None):
     with connect() as conn:
         if draft_offer is not None:
             conn.execute(
-                "UPDATE jobs SET status = ?, draft_offer = ?, updated_at = datetime('now') WHERE job_id = ?",
-                (status, draft_offer, job_id),
+                "UPDATE jobs SET status = ?, draft_offer = ?, reason = ?, updated_at = datetime('now') WHERE job_id = ?",
+                (status, draft_offer, reason, job_id),
             )
         else:
             conn.execute(
-                "UPDATE jobs SET status = ?, updated_at = datetime('now') WHERE job_id = ?",
-                (status, job_id),
+                "UPDATE jobs SET status = ?, reason = ?, updated_at = datetime('now') WHERE job_id = ?",
+                (status, reason, job_id),
             )
 
 

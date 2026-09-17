@@ -42,7 +42,8 @@ async def scan_job(context) -> None:
         if evaluation.is_match:
             await notify_job(context.application, job, evaluation)
         else:
-            state.set_status(job.job_id, "rejected_auto")
+            logger.info("Rejected %s (%s): %s", job.job_id, job.title, evaluation.reason)
+            state.set_status(job.job_id, "rejected_auto", reason=evaluation.reason)
 
     state.set_meta("last_scan_new_count", str(new_count))
     if new_count:
