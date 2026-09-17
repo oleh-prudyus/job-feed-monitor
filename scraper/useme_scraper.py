@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 
 from config import proxy_url
 
-JOBS_URL = "https://useme.com/en/jobs/"
+JOBS_URL = "https://useme.com/en/jobs/category/programming-i-it,2/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 
