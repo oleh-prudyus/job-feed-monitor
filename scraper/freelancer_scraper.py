@@ -12,6 +12,16 @@ Job listing URLs don't reliably carry a numeric ID in the slug (e.g.
 "/projects/debugging/senior-react-pwa-developer-clean" has none), so the
 listing's URL path itself is used as the unique id, prefixed "fl:" to keep
 it visually distinct from Useme's purely-numeric ids in the shared jobs table.
+
+Unlike Useme, Freelancer.com has no single combined "IT & Programming"
+category -- categories are per-skill pages instead (/jobs/python/,
+/jobs/php/, ...), and there's no way to combine several into one URL
+(confirmed by hand: a multi-segment path like /jobs/python/web-scraping/
+just 404s). The plain /jobs/ feed covers every category on the site (SEO,
+translation, video editing, ...), which drowned out the relevant postings
+in a live test -- 50/50 fetched were auto-rejected, almost all for being
+completely off-skill, not because the LLM filter was too strict. So this
+scans a short list of skill pages that actually match Oleh's stack instead.
 """
 import logging
 import re
@@ -23,7 +33,11 @@ from scraper.useme_scraper import JobListing
 
 logger = logging.getLogger(__name__)
 
-JOBS_URL = "https://www.freelancer.com/jobs/"
+# Skill-page categories to scan, matching Oleh's actual stack (see
+# Knowledge/IT/Freelance/Useme.md and the C#/.NET memory note) rather than
+# the unfiltered /jobs/ feed -- keeps both the noise and the LLM-eval cost down.
+CATEGORY_SLUGS = ["python", "c-sharp-programming", "web-scraping", "web-security"]
+JOBS_URL_TEMPLATE = "https://www.freelancer.com/jobs/{slug}/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 CARD_SELECTOR = ".JobSearchCard-item"
 
@@ -42,22 +56,37 @@ def _clean_budget_text(text: str) -> str:
     return re.sub(r"(?<=[a-z])(?=Avg Bid)", " ", text)
 
 
-def fetch_jobs(url: str = JOBS_URL) -> list[JobListing]:
+def _fetch_category_html(page, slug: str) -> str | None:
+    url = JOBS_URL_TEMPLATE.format(slug=slug)
+    page.goto(url, timeout=LOAD_TIMEOUT_MS)
+    try:
+        page.wait_for_selector(CARD_SELECTOR, timeout=LOAD_TIMEOUT_MS)
+    except Exception:
+        logger.warning("Freelancer category '%s': no job cards appeared, page may be blocked", slug)
+        return None
+    return page.content()
+
+
+def fetch_jobs(slugs: list[str] = CATEGORY_SLUGS) -> list[JobListing]:
+    listings: list[JobListing] = []
+    seen_ids: set[str] = set()
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, proxy=playwright_proxy())
         try:
             page = browser.new_page(user_agent=USER_AGENT)
-            page.goto(url, timeout=LOAD_TIMEOUT_MS)
-            try:
-                page.wait_for_selector(CARD_SELECTOR, timeout=LOAD_TIMEOUT_MS)
-            except Exception:
-                logger.warning("Freelancer: no job cards appeared, page may be blocked")
-                return []
-            html = page.content()
+            for slug in slugs:
+                html = _fetch_category_html(page, slug)
+                if html is None:
+                    continue
+                for job in parse_jobs(html):
+                    if job.job_id not in seen_ids:
+                        seen_ids.add(job.job_id)
+                        listings.append(job)
         finally:
             browser.close()
 
-    return parse_jobs(html)
+    return listings
 
 
 def parse_jobs(html: str) -> list[JobListing]:
@@ -72,6 +101,11 @@ def parse_jobs(html: str) -> list[JobListing]:
             continue
 
         href = title_link["href"]
+        if href.startswith("/login") or href.startswith("login"):
+            # Private/invite-only projects render as a card whose link goes to a login
+            # wall instead of the project ("Private project or contest #12345", no real
+            # title or description) -- nothing useful to evaluate or notify about.
+            continue
         description_tag = card.select_one(".JobSearchCard-primary-description")
         price_tag = card.select_one(".JobSearchCard-secondary-price") or card.select_one(".JobSearchCard-primary-price")
         entry_tag = card.select_one(".JobSearchCard-secondary-entry")

@@ -9,8 +9,10 @@ from dataclasses import dataclass
 from evaluator.criteria import ACCEPT_SIGNALS, REJECT_RULES, SKILLS
 
 SYSTEM_PROMPT = f"""You are helping a beginner freelancer (Oleh, based in Poland) triage
-job listings from useme.com. Decide if a listing is worth applying to, and if so,
-draft a short cover message he can send as-is or lightly edit.
+job listings from useme.com and freelancer.com (see the "Platform" field in each listing --
+the two have very different typical competition levels, see the rules below). Decide if a
+listing is worth applying to, and if so, draft a short cover message he can send as-is or
+lightly edit.
 
 His skills:
 {SKILLS}
@@ -49,8 +51,13 @@ def detect_provider() -> str | None:
         return None
 
 
+def _platform_name(job) -> str:
+    return "Freelancer.com" if "freelancer.com" in job.url else "Useme"
+
+
 def _job_summary(job) -> str:
     return (
+        f"Platform: {_platform_name(job)}\n"
         f"Title: {job.title}\n"
         f"Category: {job.category}\n"
         f"Budget: {job.budget_text}\n"
