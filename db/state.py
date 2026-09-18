@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     job_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     url TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'seen',  -- seen | notified | approved | rejected | rejected_auto | sent | failed
+    status TEXT NOT NULL DEFAULT 'seen',  -- seen | notified | saved | rejected | rejected_auto | sent
     draft_offer TEXT,
     reason TEXT,
     first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -59,17 +59,16 @@ def mark_seen(job_id: str, title: str, url: str, status: str = "seen"):
 
 
 def set_status(job_id: str, status: str, draft_offer: str | None = None, reason: str | None = None):
+    # COALESCE keeps the existing draft_offer/reason when the caller doesn't pass one
+    # (e.g. marking a job "saved" or "sent" later, well after notify_job() already
+    # stored both) -- a plain overwrite would silently null them out on every status
+    # change that doesn't happen to repeat them.
     with connect() as conn:
-        if draft_offer is not None:
-            conn.execute(
-                "UPDATE jobs SET status = ?, draft_offer = ?, reason = ?, updated_at = datetime('now') WHERE job_id = ?",
-                (status, draft_offer, reason, job_id),
-            )
-        else:
-            conn.execute(
-                "UPDATE jobs SET status = ?, reason = ?, updated_at = datetime('now') WHERE job_id = ?",
-                (status, reason, job_id),
-            )
+        conn.execute(
+            "UPDATE jobs SET status = ?, draft_offer = COALESCE(?, draft_offer), "
+            "reason = COALESCE(?, reason), updated_at = datetime('now') WHERE job_id = ?",
+            (status, draft_offer, reason, job_id),
+        )
 
 
 def get_job(job_id: str) -> sqlite3.Row | None:
@@ -90,6 +89,13 @@ def get_rowid(job_id: str) -> int:
 def get_job_by_rowid(rowid: int) -> sqlite3.Row | None:
     with connect() as conn:
         return conn.execute("SELECT * FROM jobs WHERE rowid = ?", (rowid,)).fetchone()
+
+
+def jobs_by_status(status: str) -> list[sqlite3.Row]:
+    with connect() as conn:
+        return conn.execute(
+            "SELECT rowid, * FROM jobs WHERE status = ? ORDER BY updated_at", (status,)
+        ).fetchall()
 
 
 def set_meta(key: str, value: str):

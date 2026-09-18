@@ -1,14 +1,19 @@
-"""Telegram notification + approval flow.
+"""Telegram notification + save-for-later flow.
 
 Flow per new matching job:
-1. notify_job() sends a card: title, budget, why it matched, draft offer text,
-   with [Approve] [Edit] [Reject] buttons.
-2. Approve  -> db status "approved", submitter.submit_offer() is triggered.
-3. Reject   -> db status "rejected", nothing else happens.
-4. Edit     -> bot asks for replacement text; next plain-text message from
-   Oleh becomes the new draft_offer and is treated as an approval.
+1. notify_job() sends a card: title, budget, why it matched, draft offer text
+   (already in the same language as the listing itself -- see
+   evaluator.llm_evaluator.SYSTEM_PROMPT), with two buttons: [Підходить] [Не підходить].
+2. Підходить      -> db status "saved". Nothing is sent anywhere automatically --
+   Oleh applies himself, on his own time, from /saved.
+3. Не підходить   -> db status "rejected", nothing else happens.
+4. /saved re-sends a card for every "saved" job with a single [Надіслано] button,
+   so he can browse them whenever he has a moment and mark each done as he
+   actually submits it manually on the platform.
+
+No auto-submission (Useme's submitter/useme_submitter.py or otherwise) is wired
+into this flow -- Oleh explicitly wants to be the one sending every offer himself.
 """
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -18,8 +23,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
-    MessageHandler,
-    filters,
 )
 
 from config import FREELANCER_SCAN_INTERVAL_SECONDS, SCAN_INTERVAL_SECONDS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
@@ -27,15 +30,11 @@ from db import state
 
 logger = logging.getLogger(__name__)
 
-# job_id of the listing currently awaiting replacement text via /edit, if any.
-_awaiting_edit: str | None = None
-
 # status -> (emoji, human label), shown in /status in this order.
 _STATUS_LABELS = {
     "notified": ("⏳", "Очікують рішення"),
-    "approved": ("👍", "Схвалено (надсилається)"),
-    "sent": ("📨", "Офер надіслано"),
-    "failed": ("⚠️", "Не вдалося надіслати"),
+    "saved": ("💾", "Збережено (чекає надсилання вручну)"),
+    "sent": ("📨", "Надіслано вручну"),
     "rejected": ("🙅", "Відхилено вручну"),
     "rejected_auto": ("🤖", "Відхилено автоматично (LLM)"),
     "seen": ("👀", "Побачено, ще не оцінено"),
@@ -58,19 +57,33 @@ def _time_ago(iso: str) -> str:
     return f"{hours // 24} дн тому"
 
 
-def _keyboard(rowid: int) -> InlineKeyboardMarkup:
+def _job_card_text(job_row, reason: str | None = None) -> str:
+    lines = [
+        f"<b>{job_row['title']}</b>",
+        job_row["url"],
+    ]
+    if reason:
+        lines.append(f"\n<i>Чому підходить:</i> {reason}")
+    lines.append(f"\n<b>Чернетка офера:</b>\n{job_row['draft_offer']}")
+    return "\n".join(lines)
+
+
+def _decision_keyboard(rowid: int) -> InlineKeyboardMarkup:
     # callback_data uses the short sqlite rowid, not job_id -- Telegram caps callback_data
     # at 64 bytes, and Freelancer's job_ids (full URL paths) can exceed that (see
     # state.get_rowid's docstring).
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Схвалити", callback_data=f"approve:{rowid}"),
-                InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit:{rowid}"),
-                InlineKeyboardButton("❌ Відхилити", callback_data=f"reject:{rowid}"),
+                InlineKeyboardButton("👍 Підходить", callback_data=f"save:{rowid}"),
+                InlineKeyboardButton("👎 Не підходить", callback_data=f"reject:{rowid}"),
             ]
         ]
     )
+
+
+def _sent_keyboard(rowid: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("✅ Надіслано", callback_data=f"sent:{rowid}")]])
 
 
 async def notify_job(app: Application, job, evaluation) -> None:
@@ -85,85 +98,47 @@ async def notify_job(app: Application, job, evaluation) -> None:
         chat_id=TELEGRAM_CHAT_ID,
         text=text,
         parse_mode="HTML",
-        reply_markup=_keyboard(state.get_rowid(job.job_id)),
+        reply_markup=_decision_keyboard(state.get_rowid(job.job_id)),
         disable_web_page_preview=True,
     )
-    state.set_status(job.job_id, "notified", draft_offer=evaluation.draft_offer)
+    state.set_status(job.job_id, "notified", draft_offer=evaluation.draft_offer, reason=evaluation.reason)
 
 
 async def _on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global _awaiting_edit
     query = update.callback_query
     await query.answer()
     action, rowid_str = query.data.split(":", 1)
     job_id = state.get_job_by_rowid(int(rowid_str))["job_id"]
 
-    if action == "approve":
-        job = state.get_job(job_id)
-        state.set_status(job_id, "approved")
+    if action == "save":
+        state.set_status(job_id, "saved")
         await query.edit_message_reply_markup(reply_markup=None)
-
-        if job_id.startswith("fl:"):
-            # No Freelancer.com session/credentials are set up for automated bidding
-            # (unlike Useme, where submitter/useme_submitter.py reuses a saved login) --
-            # so approving here just confirms the draft offer, submitted manually.
-            await query.message.reply_text(
-                f"Схвалено. Автонадсилання на Freelancer не налаштоване -- познач заявку вручну:\n{job['url']}"
-            )
-            return
-
-        await query.message.reply_text("Схвалено — надсилаю офер на Useme.")
-        from submitter.useme_submitter import submit_offer
-
-        try:
-            await asyncio.to_thread(submit_offer, job_id, job["url"], job["draft_offer"])
-            state.set_status(job_id, "sent")
-            await query.message.reply_text("Офер надіслано.")
-        except Exception as exc:  # submission is best-effort; never crash the bot
-            state.set_status(job_id, "failed")
-            logger.exception("Failed to submit offer for %s", job_id)
-            await query.message.reply_text(f"Не вдалося надіслати офер: {exc}")
+        await query.message.reply_text("Збережено — знайдеш у /saved, коли будеш готовий надіслати.")
 
     elif action == "reject":
         state.set_status(job_id, "rejected")
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text("Відхилено.")
 
-    elif action == "edit":
-        _awaiting_edit = job_id
-        await query.message.reply_text(
-            "Надішли текст офера, яким замінити чернетку — наступне твоє повідомлення."
-        )
-
-
-async def _on_edit_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    global _awaiting_edit
-    if _awaiting_edit is None:
-        return
-
-    job_id = _awaiting_edit
-    _awaiting_edit = None
-    new_text = update.message.text
-    state.set_status(job_id, "approved", draft_offer=new_text)
-    job = state.get_job(job_id)
-
-    if job_id.startswith("fl:"):
-        await update.message.reply_text(
-            f"Замінено. Автонадсилання на Freelancer не налаштоване -- познач заявку вручну:\n{job['url']}"
-        )
-        return
-
-    await update.message.reply_text("Замінено — надсилаю офер на Useme.")
-    from submitter.useme_submitter import submit_offer
-
-    try:
-        await asyncio.to_thread(submit_offer, job_id, job["url"], new_text)
+    elif action == "sent":
         state.set_status(job_id, "sent")
-        await update.message.reply_text("Офер надіслано.")
-    except Exception as exc:
-        state.set_status(job_id, "failed")
-        logger.exception("Failed to submit offer for %s", job_id)
-        await update.message.reply_text(f"Не вдалося надіслати офер: {exc}")
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text("Позначено як надіслано.")
+
+
+async def _on_saved(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    jobs = state.jobs_by_status("saved")
+    if not jobs:
+        await update.message.reply_text("Немає збережених вакансій.")
+        return
+
+    for job_row in jobs:
+        await update.message.reply_text(
+            _job_card_text(job_row, reason=job_row["reason"]),
+            parse_mode="HTML",
+            reply_markup=_sent_keyboard(job_row["rowid"]),
+            disable_web_page_preview=True,
+        )
 
 
 def _scan_lines(label: str, meta_prefix: str, interval_seconds: int) -> list[str]:
@@ -208,6 +183,6 @@ async def _on_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 def build_app() -> Application:
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("status", _on_status))
+    app.add_handler(CommandHandler("saved", _on_saved))
     app.add_handler(CallbackQueryHandler(_on_button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_edit_text))
     return app
