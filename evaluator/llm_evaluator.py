@@ -27,7 +27,7 @@ Respond ONLY with a JSON object, no other text:
 {{
   "is_match": true/false,
   "reason": "one sentence in Ukrainian explaining the verdict",
-  "draft_offer": "short offer message in the SAME language as the job listing, or empty string if is_match is false"
+  "draft_offer": "short offer message written in the exact language named by the 'Listing language' field below, or empty string if is_match is false"
 }}
 
 The draft_offer should be 3-5 sentences: reference something specific from the listing,
@@ -55,9 +55,35 @@ def _platform_name(job) -> str:
     return "Freelancer.com" if "freelancer.com" in job.url else "Useme"
 
 
+# ISO 639-1 -> readable name for the languages actually seen on Useme/Freelancer listings.
+# langdetect returns other codes too, but this covers what's come up in practice.
+_LANGUAGE_NAMES = {
+    "en": "English", "pl": "Polish", "uk": "Ukrainian", "ru": "Russian",
+    "pt": "Portuguese", "es": "Spanish", "de": "German", "fr": "French",
+    "it": "Italian", "cs": "Czech", "sk": "Slovak", "nl": "Dutch",
+    "tr": "Turkish", "ro": "Romanian", "sv": "Swedish", "da": "Danish",
+}
+
+
+def _detect_listing_language(job) -> str:
+    # Asking the model to infer the listing's language *and* reliably reply in it
+    # was not reliably honored in practice (confirmed live: a Portuguese Freelancer
+    # listing got a Ukrainian draft_offer back). Detecting it in code and naming it
+    # explicitly removes that guesswork -- same pattern as main.py's competition caps.
+    from langdetect import LangDetectException, detect
+
+    text = job.description or job.title
+    try:
+        code = detect(text)
+    except LangDetectException:
+        return "the same language as the listing"
+    return _LANGUAGE_NAMES.get(code, "the same language as the listing")
+
+
 def _job_summary(job) -> str:
     return (
         f"Platform: {_platform_name(job)}\n"
+        f"Listing language: {_detect_listing_language(job)}\n"
         f"Title: {job.title}\n"
         f"Category: {job.category}\n"
         f"Budget: {job.budget_text}\n"

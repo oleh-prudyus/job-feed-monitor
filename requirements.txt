@@ -5,3 +5,4 @@ anthropic
 openai
 python-dotenv
 playwright==1.47.0
+langdetect==1.0.9
