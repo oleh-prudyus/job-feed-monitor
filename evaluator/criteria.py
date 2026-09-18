@@ -4,9 +4,11 @@ tweak without touching the LLM-calling code.
 """
 
 SKILLS = """
-- Python: web scraping (Requests/BeautifulSoup, Playwright), pandas, FastAPI, automation, AI API integration (Claude/OpenAI)
+- Python: web scraping (Requests/BeautifulSoup, Playwright), pandas, FastAPI, automation, AI API integration (Claude/OpenAI) -- this is the main focus right now
 - C#/.NET: can build real projects (confirmed skill, not just theory)
-- Long-term direction: cybersecurity (security audits, hardening, OSINT) — weight these higher when present
+- NOT ready yet for cybersecurity/security-audit work (still building up university coursework + English) --
+  do not treat "security audit / hardening / OSINT" listings as a good fit for now, reject them like any
+  other out-of-scope listing even though this is a longer-term direction later
 """
 
 REJECT_RULES = """
@@ -27,6 +29,5 @@ by the model). Judge remaining listings on fit/scope/legitimacy, not bid count.
 ACCEPT_SIGNALS = """
 - один чіткий сайт/задача → конкретні поля/deliverable → зрозумілий формат виводу
 - бюджет adекватний обсягу
-- Python-скрапінг/автоматизація/AI-інтеграція/невеликий .NET-застосунок з чітким скоупом
-- security audit / hardening для малого бізнесу (найвищий пріоритет)
+- Python-скрапінг (найвищий пріоритет зараз) / автоматизація / AI-інтеграція / невеликий .NET-застосунок з чітким скоупом
 """
