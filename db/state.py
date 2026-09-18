@@ -77,6 +77,21 @@ def get_job(job_id: str) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
 
 
+def get_rowid(job_id: str) -> int:
+    """SQLite's implicit integer rowid for a job, used as a short stand-in for job_id in
+    Telegram callback_data -- Freelancer's job_ids (full URL paths) can run past Telegram's
+    64-byte callback_data limit, which silently breaks the whole notification (BadRequest:
+    Button_data_invalid), while a rowid is always short."""
+    with connect() as conn:
+        row = conn.execute("SELECT rowid FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+        return row["rowid"]
+
+
+def get_job_by_rowid(rowid: int) -> sqlite3.Row | None:
+    with connect() as conn:
+        return conn.execute("SELECT * FROM jobs WHERE rowid = ?", (rowid,)).fetchone()
+
+
 def set_meta(key: str, value: str):
     with connect() as conn:
         conn.execute(

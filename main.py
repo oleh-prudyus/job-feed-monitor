@@ -71,7 +71,14 @@ async def _run_scan(context, source_label: str, fetch_fn, meta_prefix: str) -> N
             continue
 
         if evaluation.is_match:
-            await notify_job(context.application, job, evaluation)
+            try:
+                await notify_job(context.application, job, evaluation)
+            except Exception:
+                # A single bad notification (e.g. Telegram rejecting an oversized
+                # callback_data) must not silently abort the rest of the scan --
+                # confirmed this happened for real before rowid-based callback_data
+                # replaced raw job_id (see db/state.py get_rowid docstring).
+                logger.exception("Failed to notify about job %s", job.job_id)
         else:
             logger.info("Rejected %s (%s): %s", job.job_id, job.title, evaluation.reason)
             state.set_status(job.job_id, "rejected_auto", reason=evaluation.reason)

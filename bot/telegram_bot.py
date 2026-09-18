@@ -58,13 +58,16 @@ def _time_ago(iso: str) -> str:
     return f"{hours // 24} дн тому"
 
 
-def _keyboard(job_id: str) -> InlineKeyboardMarkup:
+def _keyboard(rowid: int) -> InlineKeyboardMarkup:
+    # callback_data uses the short sqlite rowid, not job_id -- Telegram caps callback_data
+    # at 64 bytes, and Freelancer's job_ids (full URL paths) can exceed that (see
+    # state.get_rowid's docstring).
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Схвалити", callback_data=f"approve:{job_id}"),
-                InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit:{job_id}"),
-                InlineKeyboardButton("❌ Відхилити", callback_data=f"reject:{job_id}"),
+                InlineKeyboardButton("✅ Схвалити", callback_data=f"approve:{rowid}"),
+                InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit:{rowid}"),
+                InlineKeyboardButton("❌ Відхилити", callback_data=f"reject:{rowid}"),
             ]
         ]
     )
@@ -82,7 +85,7 @@ async def notify_job(app: Application, job, evaluation) -> None:
         chat_id=TELEGRAM_CHAT_ID,
         text=text,
         parse_mode="HTML",
-        reply_markup=_keyboard(job.job_id),
+        reply_markup=_keyboard(state.get_rowid(job.job_id)),
         disable_web_page_preview=True,
     )
     state.set_status(job.job_id, "notified", draft_offer=evaluation.draft_offer)
@@ -92,7 +95,8 @@ async def _on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     global _awaiting_edit
     query = update.callback_query
     await query.answer()
-    action, job_id = query.data.split(":", 1)
+    action, rowid_str = query.data.split(":", 1)
+    job_id = state.get_job_by_rowid(int(rowid_str))["job_id"]
 
     if action == "approve":
         job = state.get_job(job_id)
