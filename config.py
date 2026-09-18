@@ -13,6 +13,12 @@ USEME_PASSWORD = os.environ.get("USEME_PASSWORD")
 # How often to re-scan the feed, in seconds.
 SCAN_INTERVAL_SECONDS = int(os.environ.get("SCAN_INTERVAL_SECONDS", "900"))
 
+# Freelancer.com gets its own (longer) interval: unlike Useme's page 1, every
+# scan there needs a full headless-browser render (see scraper/freelancer_scraper.py),
+# and the site has anti-bot infrastructure (captcha present in its JS bundle) that
+# frequent automated visits are more likely to trip -- start conservative.
+FREELANCER_SCAN_INTERVAL_SECONDS = int(os.environ.get("FREELANCER_SCAN_INTERVAL_SECONDS", "1200"))
+
 # Optional Polish residential/ISP proxy, so all traffic to Useme (scraping and
 # offer submission) matches the country the account was verified in, rather
 # than the VPS's own (German) IP. All requests must go through the same proxy
