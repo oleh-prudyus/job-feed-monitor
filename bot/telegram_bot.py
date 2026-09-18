@@ -110,7 +110,11 @@ async def _on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     action, rowid_str = query.data.split(":", 1)
     job_id = state.get_job_by_rowid(int(rowid_str))["job_id"]
 
-    if action == "save":
+    # "approve"/"edit" are the old (pre save-for-later) action names -- messages sent
+    # before this flow changed still carry buttons with that callback_data, and would
+    # otherwise silently do nothing when tapped. Treat them the same as "save" so old
+    # pending notifications keep working instead of turning into dead buttons.
+    if action in ("save", "approve", "edit"):
         state.set_status(job_id, "saved")
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text("Збережено — знайдеш у /saved, коли будеш готовий надіслати.")
