@@ -41,6 +41,23 @@ def _competition_cap(url: str) -> int:
     return DEFAULT_COMPETITION_CAP
 
 
+def _freelancehunt_region_blocked(job) -> bool:
+    """True if this Freelancehunt listing is very likely restricted to
+    Ukraine-registered accounts, which Oleh's Poland-registered account is not.
+
+    Confirmed live: a listing with no fixed budget on its card ("Nie podano")
+    was posted with the client's own currency, UAH -- attempting to bid threw
+    "Projects in UAH (Ukrainian hryvnia) are available to freelancers
+    registered in Ukraine". Checked two "Nie podano" listings, both UAH-only.
+    A listing WITH a fixed PLN budget on the card (e.g. "676 PLN") was postable
+    normally -- the project's own currency is what gates bidding, not what
+    currency individual freelancers write their counter-offers in (those varied
+    regardless). Card-level budget_text is the only signal available without
+    opening every listing's page, so this is a heuristic, not a certainty.
+    """
+    return "freelancehunt.com" in job.url and job.budget_text.strip() == "Nie podano"
+
+
 async def _run_scan(context, source_label: str, fetch_fn, meta_prefix: str) -> None:
     meta_at, meta_ok, meta_count = f"{meta_prefix}_at", f"{meta_prefix}_ok", f"{meta_prefix}_new_count"
     state.set_meta(meta_at, datetime.now(timezone.utc).isoformat(timespec="seconds"))
@@ -62,6 +79,12 @@ async def _run_scan(context, source_label: str, fetch_fn, meta_prefix: str) -> N
             continue
         state.mark_seen(job.job_id, job.title, job.url)
         new_count += 1
+
+        if _freelancehunt_region_blocked(job):
+            reason = "Ймовірно доступно лише фрилансерам, зареєстрованим в Україні (валюта UAH)"
+            logger.info("Rejected %s (%s): %s", job.job_id, job.title, reason)
+            state.set_status(job.job_id, "rejected_auto", reason=reason)
+            continue
 
         cap = _competition_cap(job.url)
         if job.offers_count > cap:
