@@ -65,7 +65,14 @@ def fetch_jobs(categories: dict[str, str] = CATEGORIES) -> list[JobListing]:
     seen_ids: set[str] = set()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, proxy=playwright_proxy())
+        # headless=False here, unlike the other scrapers -- Cloudflare's challenge on
+        # this site's category pages kept failing to resolve under headless Chromium
+        # (confirmed live: "python" and "parsowanie-danych" blocked on every single
+        # scan for 2+ hours straight, only "c" occasionally got through). A real
+        # (headed) browser is much harder for Cloudflare to fingerprint as automation.
+        # Needs a virtual display since the container has no real one -- see the
+        # Dockerfile's `xvfb-run` wrapper around the whole process.
+        browser = p.chromium.launch(headless=False, proxy=playwright_proxy())
         try:
             page = browser.new_page(user_agent=USER_AGENT)
             for slug, skill_id in categories.items():

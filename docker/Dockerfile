@@ -11,4 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "main.py"]
+# xvfb-run gives Chromium a real (virtual) display via Xvfb, already bundled in this
+# base image. Only scraper/freelancehunt_scraper.py actually launches headed (see its
+# own comment) -- the other scrapers stay headless=True and are unaffected by having
+# a DISPLAY available. `-a` picks a free display number automatically.
+CMD ["xvfb-run", "-a", "python", "main.py"]
