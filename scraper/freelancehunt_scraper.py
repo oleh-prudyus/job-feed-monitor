@@ -65,16 +65,19 @@ def fetch_jobs(categories: dict[str, str] = CATEGORIES) -> list[JobListing]:
     seen_ids: set[str] = set()
 
     with sync_playwright() as p:
-        # headless=False here, unlike the other scrapers -- Cloudflare's challenge on
-        # this site's category pages kept failing to resolve under headless Chromium
-        # (confirmed live: "python" and "parsowanie-danych" blocked on every single
-        # scan for 2+ hours straight, only "c" occasionally got through). A real
-        # (headed) browser is much harder for Cloudflare to fingerprint as automation.
-        # Needs a virtual display since the container has no real one -- see the
-        # Dockerfile's `xvfb-run` wrapper around the whole process.
-        browser = p.chromium.launch(headless=False, proxy=playwright_proxy())
+        # Tried headless=False (via Xvfb) to see if Cloudflare's challenge on the
+        # "python" and "parsowanie-danych" category pages was fingerprinting headless
+        # mode specifically -- it wasn't: still blocked, identically, in headed mode.
+        # Confirmed by hand that navigator.webdriver was the more likely tell (true
+        # by default in Playwright), so the init script below spoofs it regardless of
+        # headless/headed -- but even with that spoofed, the challenge still didn't
+        # clear. Whatever Cloudflare is keying on here (TLS/canvas/timing fingerprint,
+        # most likely) isn't fixed by either of those, so this stays headless=True:
+        # same result, without the extra Xvfb/resource overhead for no benefit.
+        browser = p.chromium.launch(headless=True, proxy=playwright_proxy())
         try:
             page = browser.new_page(user_agent=USER_AGENT)
+            page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
             for slug, skill_id in categories.items():
                 html = _fetch_category_html(page, slug, skill_id)
                 if html is None:
