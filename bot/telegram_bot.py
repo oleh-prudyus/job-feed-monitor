@@ -25,7 +25,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from config import FREELANCER_SCAN_INTERVAL_SECONDS, SCAN_INTERVAL_SECONDS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config import FREELANCEHUNT_SCAN_INTERVAL_SECONDS, SCAN_INTERVAL_SECONDS, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from db import state
 
 logger = logging.getLogger(__name__)
@@ -172,7 +172,7 @@ async def _on_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     lines.append("")
     lines.extend(_scan_lines("Useme", "last_scan", SCAN_INTERVAL_SECONDS))
     lines.append("")
-    lines.extend(_scan_lines("Freelancer", "freelancer_last_scan", FREELANCER_SCAN_INTERVAL_SECONDS))
+    lines.extend(_scan_lines("Freelancehunt", "freelancehunt_last_scan", FREELANCEHUNT_SCAN_INTERVAL_SECONDS))
 
     lines.append("")
     lines.append(f"<b>📈 Усього переглянуто вакансій: {total}</b>")

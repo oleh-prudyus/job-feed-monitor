@@ -8,11 +8,17 @@ import logging
 from datetime import datetime, timezone
 
 from bot.telegram_bot import build_app, notify_job
-from config import FREELANCER_SCAN_INTERVAL_SECONDS, SCAN_INTERVAL_SECONDS
+from config import FREELANCEHUNT_SCAN_INTERVAL_SECONDS, SCAN_INTERVAL_SECONDS
 from db import state
 from evaluator.llm_evaluator import evaluate
-from scraper.freelancer_scraper import fetch_jobs as fetch_freelancer_jobs
+from scraper.freelancehunt_scraper import fetch_jobs as fetch_freelancehunt_jobs
 from scraper.useme_scraper import fetch_jobs as fetch_useme_jobs
+
+# Freelancer.com scanning is implemented (scraper/freelancer_scraper.py) but not
+# scheduled below -- Oleh hasn't passed Freelancer's own ID verification yet, so
+# there's no point surfacing jobs he can't currently bid on. Re-enable by importing
+# fetch_jobs from scraper.freelancer_scraper and registering scan_freelancer_job
+# again in main() once verification goes through.
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -24,7 +30,7 @@ logger = logging.getLogger(__name__)
 # platform-relative threshold itself wasn't reliably honored (tested: gpt-4o-mini
 # still rejected a 40-bid Freelancer listing for "too much competition" after being
 # told 60-80 was fine there). A plain numeric check in code is deterministic instead.
-COMPETITION_CAPS = {"freelancer.com": 100, "useme.com": 30}
+COMPETITION_CAPS = {"freelancer.com": 100, "useme.com": 30, "freelancehunt.com": 60}
 DEFAULT_COMPETITION_CAP = 30
 
 
@@ -92,19 +98,19 @@ async def scan_job(context) -> None:
     await _run_scan(context, "Useme", fetch_useme_jobs, "last_scan")
 
 
-async def scan_freelancer_job(context) -> None:
-    await _run_scan(context, "Freelancer", fetch_freelancer_jobs, "freelancer_last_scan")
+async def scan_freelancehunt_job(context) -> None:
+    await _run_scan(context, "Freelancehunt", fetch_freelancehunt_jobs, "freelancehunt_last_scan")
 
 
 def main() -> None:
     app = build_app()
     state.set_meta("bot_started_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
     app.job_queue.run_repeating(scan_job, interval=SCAN_INTERVAL_SECONDS, first=5)
-    app.job_queue.run_repeating(scan_freelancer_job, interval=FREELANCER_SCAN_INTERVAL_SECONDS, first=15)
+    app.job_queue.run_repeating(scan_freelancehunt_job, interval=FREELANCEHUNT_SCAN_INTERVAL_SECONDS, first=15)
     logger.info(
-        "Starting bot, scanning Useme every %ds and Freelancer every %ds",
+        "Starting bot, scanning Useme every %ds and Freelancehunt every %ds",
         SCAN_INTERVAL_SECONDS,
-        FREELANCER_SCAN_INTERVAL_SECONDS,
+        FREELANCEHUNT_SCAN_INTERVAL_SECONDS,
     )
     app.run_polling()
 
