@@ -11,8 +11,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# xvfb-run gives Chromium a real (virtual) display via Xvfb, already bundled in this
-# base image. Only scraper/freelancehunt_scraper.py actually launches headed (see its
-# own comment) -- the other scrapers stay headless=True and are unaffected by having
-# a DISPLAY available. `-a` picks a free display number automatically.
-CMD ["xvfb-run", "-a", "python", "main.py"]
+# Gives Chromium a real (virtual) display via Xvfb, already bundled in this base
+# image -- see docker/entrypoint.sh for why it's started manually instead of via
+# xvfb-run. Only scraper/freelancehunt_scraper.py actually launches headed (see
+# its own comment) -- the other scrapers stay headless=True and are unaffected
+# by having a DISPLAY available.
+RUN chmod +x docker/entrypoint.sh
+ENTRYPOINT ["docker/entrypoint.sh"]
+CMD ["python", "main.py"]
