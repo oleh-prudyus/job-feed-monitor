@@ -160,6 +160,13 @@ def parse_jobs(html: str) -> list[JobListing]:
         if not title_link:
             continue
 
+        # Closed/awarded listings stay in the category feed (Useme doesn't drop them),
+        # marked only by this modifier class on the title link and a "Finished" label
+        # in the date details -- confirmed by hand against the live page. Skip them:
+        # applying to an already-finished job wastes an offer slot for nothing.
+        if "job__title-link--closed" in title_link.get("class", []):
+            continue
+
         url = "https://useme.com" + title_link["href"]
         client_name_tag = article.select_one("strong[aria-label]")
         offers_tag = article.select_one(".job__header-details--offers span:last-child")
