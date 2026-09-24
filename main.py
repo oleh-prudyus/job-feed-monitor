@@ -30,11 +30,15 @@ logger = logging.getLogger(__name__)
 # platform-relative threshold itself wasn't reliably honored (tested: gpt-4o-mini
 # still rejected a 40-bid Freelancer listing for "too much competition" after being
 # told 60-80 was fine there). A plain numeric check in code is deterministic instead.
-COMPETITION_CAPS = {"freelancer.com": 100, "useme.com": 30, "freelancehunt.com": 60}
+#
+# None = no cap. Useme's was 30 while Oleh had zero completed orders; lifted
+# 2026-09-24 once he had delivered work there, since that already sets him apart
+# from the zero-history bidders who make up much of a 50-80 offer pile.
+COMPETITION_CAPS = {"freelancer.com": 100, "useme.com": None, "freelancehunt.com": 60}
 DEFAULT_COMPETITION_CAP = 30
 
 
-def _competition_cap(url: str) -> int:
+def _competition_cap(url: str) -> int | None:
     for domain, cap in COMPETITION_CAPS.items():
         if domain in url:
             return cap
@@ -87,7 +91,7 @@ async def _run_scan(context, source_label: str, fetch_fn, meta_prefix: str) -> N
             continue
 
         cap = _competition_cap(job.url)
-        if job.offers_count > cap:
+        if cap is not None and job.offers_count > cap:
             reason = f"Забагато конкуруючих пропозицій ({job.offers_count} > {cap} для цієї платформи)"
             logger.info("Rejected %s (%s): %s", job.job_id, job.title, reason)
             state.set_status(job.job_id, "rejected_auto", reason=reason)
