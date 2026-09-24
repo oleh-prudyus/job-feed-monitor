@@ -21,6 +21,10 @@ from scraper.useme_scraper import fetch_jobs as fetch_useme_jobs
 # again in main() once verification goes through.
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# httpx logs every request URL at INFO, and Telegram's Bot API puts the bot token in
+# the URL path (/bot<TOKEN>/getUpdates) -- so the token was written to the container
+# logs in plain text every 10 seconds of long-polling. WARNING still surfaces failures.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Max acceptable competing offers, per platform, checked in code before a listing
