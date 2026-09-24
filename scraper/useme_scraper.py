@@ -31,7 +31,16 @@ from config import playwright_proxy, proxy_url
 
 logger = logging.getLogger(__name__)
 
-JOBS_URL = "https://useme.com/en/jobs/category/programming-i-it,2/"
+# Useme serves a different feed per site language. The /en/ one only lists the few
+# English-language postings (5 on 2026-09-24, none new for a week), while the /pl/ one
+# carries ~20 per page and is where nearly all new jobs appear -- scanning /en/ alone left
+# the bot reporting "0 new" for days while real jobs went by. Whether /pl/ also contains
+# every English posting couldn't be confirmed (pagination is walled, see below), so both
+# are scanned and merged by job id; a second page-1 request per scan costs next to nothing.
+JOBS_URLS = [
+    "https://useme.com/pl/jobs/category/programowanie-i-it,2/",
+    "https://useme.com/en/jobs/category/programming-i-it,2/",
+]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 # Pagination (page 2+) is Cloudflare-walled -- confirmed by hand that ?page=2 shows the
@@ -61,7 +70,7 @@ class JobListing:
 
 
 def _extract_job_id(url: str) -> str:
-    # URLs look like /en/jobs/<slug>,<id>/
+    # URLs look like /<lang>/jobs/<slug>,<id>/ (lang = pl or en, same id in both)
     match = re.search(r",(\d+)/?$", url)
     return match.group(1) if match else url
 
@@ -137,9 +146,11 @@ def _fetch_pages_2plus_html(url: str, pages: int) -> list[str]:
     return html_by_page
 
 
-def fetch_jobs(url: str = JOBS_URL, pages: int = PAGES_TO_FETCH) -> list[JobListing]:
-    all_html = [_fetch_page1_html(url)]
-    all_html.extend(_fetch_pages_2plus_html(url, pages))
+def fetch_jobs(urls: list[str] = JOBS_URLS, pages: int = PAGES_TO_FETCH) -> list[JobListing]:
+    all_html = []
+    for url in urls:
+        all_html.append(_fetch_page1_html(url))
+        all_html.extend(_fetch_pages_2plus_html(url, pages))
 
     listings: list[JobListing] = []
     seen_ids: set[str] = set()

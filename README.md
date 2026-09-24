@@ -8,7 +8,7 @@ LLM-ом за особистими критеріями відсіву, і на�
 ## Компоненти
 
 ```
-scraper/useme_scraper.py     Парсинг публічної стрічки /en/jobs/ (requests + BeautifulSoup)
+scraper/useme_scraper.py     Парсинг публічних стрічок /pl/jobs/ + /en/jobs/ (requests + BeautifulSoup)
 evaluator/llm_evaluator.py   Оцінка вакансії + чернетка офера через Claude/OpenAI
 evaluator/criteria.py        Критерії відсіву/прийняття (окремо від промпту)
 db/state.py                  SQLite: які вакансії вже бачені/оброблені
@@ -52,6 +52,7 @@ docker compose logs -f
 ## Checklist
 
 - [x] Парсинг публічної стрічки вакансій Useme
+- [x] Сканування польської стрічки поряд з англійською (раніше бот бачив лише 5 англомовних вакансій)
 - [x] LLM-оцінка вакансій за критеріями відсіву + чернетка офера
 - [x] Telegram-сповіщення з кнопками Схвалити/Редагувати/Відхилити
 - [x] Автоматичне заповнення й надсилання офера (Playwright)
