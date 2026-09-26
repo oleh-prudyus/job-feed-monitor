@@ -37,16 +37,16 @@ def build_report() -> str:
 
     ok = meta.get("last_scan_ok") == "1"
     lines = [
-        "\U0001f4ca *useme_bot -- щоденний звіт*",
+        "\U0001f4ca *job-feed-monitor -- daily report*",
         "",
-        f"Стан сканування: {'✅ OK' if ok else '⚠️ є помилки'}",
-        f"Останній скан: {meta.get('last_scan_at', 'невідомо')}",
-        f"Нових вакансій за 24г: {new_24h}",
-        f"З них релевантних: {matches_24h}",
+        f"Scan status: {'✅ OK' if ok else '⚠️ errors'}",
+        f"Last scan: {meta.get('last_scan_at', 'unknown')}",
+        f"New jobs in 24h: {new_24h}",
+        f"Of which relevant: {matches_24h}",
     ]
     if matches:
         lines.append("")
-        lines.append("Релевантні вакансії:")
+        lines.append("Relevant jobs:")
         for m in matches:
             lines.append(f"- [{m['title']}]({m['url']}) ({m['status']})")
 

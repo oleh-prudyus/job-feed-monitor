@@ -3,25 +3,25 @@
 Internal tracker, not part of the public README.
 
 ## Done
-- [x] Скрапер Useme feed (`scraper/useme_scraper.py`), перевірено на реальній сторінці
-- [x] SQLite стан (`db/state.py`)
-- [x] LLM-оцінювач + критерії (`evaluator/`)
-- [x] Telegram-бот: сповіщення + кнопки Схвалити/Редагувати/Відхилити (`bot/telegram_bot.py`)
-- [x] Дизайн-рішення: без автологіну (Cloudflare на /login/) — ручна сесія через `scripts/save_session.py`
-- [x] Форма офера на Useme розібрана (селектори полів задокументовані в submitter TODO)
-
-- [x] `main.py` — оркестрація: job_queue python-telegram-bot (без окремого APScheduler) + запуск бота
-- [x] Docker-образ (`docker/Dockerfile`, base з preinstalled Chromium) + `docker-compose.yml`
-
-- [x] `submitter/useme_submitter.py::submit_offer()` — реалізовано (Playwright, .type() для contenteditable-редактора)
-- [x] Сесія отримана через експорт кукі з браузерного плагіна (простіше за `save_session.py`) + конвертер `scripts/cookies_to_storage_state.py`
-- [x] Задеплоєно на VPS 157.90.248.102 (`~/useme_bot`, окремий stack, порти не займає) — контейнер живий, сканує кожні 15 хв, БД персистить між рестартами
-- [x] Команда `/status` в Telegram — стан бота (відколи працює, коли останнє сканування, скільки нового знайдено, коли наступне) + зведення по статусах вакансій. Потребувало нової таблиці `meta` в `db/state.py` для зберігання часу останнього сканування (раніше ніде не записувався)
-- [x] Git-деплой на VPS замість scp: `~/useme_bot` тепер справжній git-клон (окремий read-only deploy key на GitHub), оновлення тепер `git pull` + `docker compose up -d --build`
-- [x] Польський резидентний/ISP-проксі (IPRoyal, Вроцлав) для всього трафіку до Useme — скрапер і Playwright-сабміттер ходять через один і той самий `config.proxy_url()`, щоб трафік акаунта не виглядав з німецького IP сервера. Перевірено: proxy_url() коректно формується, `fetch_jobs()` через проксі працює (20 вакансій), IP підтверджено польським (ipinfo.io: PL, Вроцлав, Korbank S.A., не датацентр)
+- [x] Useme feed scraper (`scraper/useme_scraper.py`), verified against the live page
+- [x] SQLite state (`db/state.py`)
+- [x] LLM evaluator + criteria (`evaluator/`)
+- [x] Telegram bot: notifications + buttons (`bot/telegram_bot.py`)
+- [x] `main.py` orchestration: python-telegram-bot job queue (no separate APScheduler) + bot startup
+- [x] Docker image (`docker/Dockerfile`, base image with preinstalled Chromium) + `docker-compose.yml`
+- [x] Deployed on a VPS as a separate compose stack; no ports used; SQLite persists across restarts
+- [x] `/status` command: uptime, last scan, new jobs found, next scan, per-status breakdown
+      (needed a new `meta` table in `db/state.py` to store the last scan time)
+- [x] Git-based deploy on the VPS (read-only deploy key): update = `git pull` + `docker compose up -d --build`
+- [x] Optional proxy support: scraper and any Playwright code use the same `config.proxy_url()`
+- [x] Second source: Freelancehunt (Playwright)
+- [x] Polish feed (`/pl/`) scanned alongside the English one — the English feed alone lists only a
+      handful of postings, so the bot had been reporting "0 new" for days
+- [x] Competition cap lifted for Useme (kept for the other platforms)
+- [x] Bot token no longer leaks into logs (httpx logs request URLs, and Telegram puts the token in the URL)
 
 ## Remaining
-- [ ] Перевірити `/status` наживо в реальному чаті (тут нема токена, щоб прогнати самому) — переконатись, що форматування (HTML, емодзі) відображається як задумано
-- [ ] Перший реальний тест: підтвердити офер через Telegram-кнопку "Схвалити" на живій вакансії — перевірити, чи `submit_offer()` (тепер з проксі), кнопка Summary-кроку (селектор не підтверджено наосліп, дивись коментар у коді) і сам проксі в Playwright справді працюють разом
-- [ ] Коли сесія (кукі) протухне — повторити експорт з плагіна й прогнати `cookies_to_storage_state.py` заново
-- [ ] (опційно, пізніше) Freelancer.com як другий майданчик
+- [ ] Freelancehunt: intermittently blocked by Cloudflare ("no job cards appeared") — monitoring only
+- [ ] The evaluator only sees the short description shown in the feed, not attachments or the full
+      page; long specs (e.g. a linked requirements file) can lead to a wrong "match"
+- [ ] (optional, later) Freelancer.com as a third source

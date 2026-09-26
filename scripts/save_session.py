@@ -17,9 +17,9 @@ with sync_playwright() as p:
     page = browser.new_page()
     page.goto("https://useme.com/en/login/")
 
-    input("Залогинься в вікні браузера, що відкрилось, тоді натисни Enter тут...")
+    input("Log in in the browser window that opened, then press Enter here...")
 
     page.context.storage_state(path=OUTPUT)
     browser.close()
 
-print(f"Сесію збережено в {OUTPUT}. Скопіюй цей файл на VPS у папку бота.")
+print(f"Session saved to {OUTPUT}. Copy this file to the VPS, into the bot's folder.")

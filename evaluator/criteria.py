@@ -1,5 +1,4 @@
-"""Oleh's vetting criteria, mirrored from Documents/Life/Knowledge/IT/Freelance/Upwork.md
-and Useme.md. Kept here (not hardcoded in the prompt string) so it's easy to
+"""Oleh's vetting criteria. Kept here (not hardcoded in the prompt string) so it's easy to
 tweak without touching the LLM-calling code.
 """
 
@@ -16,18 +15,18 @@ NOTE: raw offer-count-too-high is filtered out in code before it ever reaches yo
 (see main.py's COMPETITION_CAPS -- different platforms have very different typical
 bid counts, and a plain numeric threshold in this prompt was not reliably honored
 by the model). Judge remaining listings on fit/scope/legitimacy, not bid count.
-- lead-gen / збір персональних контактів (навіть "verified B2B", email harvesting з ігрових/будь-яких платформ)
-- сайти з важким anti-bot захистом (LinkedIn і подібні) як ключова залежність
-- розмитий/завеликий обсяг без чітких меж ("various tasks", "long-term equity")
-- невідповідність бюджету і обсягу (напр. багато записів за мізерний бюджет)
-- вимога досвіду, якого немає (SAP, ERP, вузькі enterprise-стеки, "US-native only")
-- підозра на нелегальну/неетичну мету
-- клієнт явно вже вибирає (Interviewing >= 3, Invites sent >= 10)
-- спам-патерн: той самий автор постить кілька майже ідентичних вакансій різними варіаціями (мова, поле) з завищеним бюджетом за нульовим описом
+- lead-gen / harvesting personal contacts (even "verified B2B"; email harvesting from gaming or any other platforms)
+- sites with heavy anti-bot protection (LinkedIn and similar) as a key dependency
+- vague or oversized scope with no clear boundaries ("various tasks", "long-term equity")
+- budget does not match scope (e.g. many records for a tiny budget)
+- requires experience Oleh does not have (SAP, ERP, niche enterprise stacks, "US-native only")
+- suspected illegal or unethical purpose
+- client is clearly already choosing (Interviewing >= 3, Invites sent >= 10)
+- spam pattern: the same author posts several near-identical listings in different variations (language, field) with an inflated budget and an empty description
 """
 
 ACCEPT_SIGNALS = """
-- один чіткий сайт/задача → конкретні поля/deliverable → зрозумілий формат виводу
-- бюджет adекватний обсягу
-- Python-скрапінг (найвищий пріоритет зараз) / автоматизація / AI-інтеграція / невеликий .NET-застосунок з чітким скоупом
+- one clear site/task -> concrete fields/deliverable -> clear output format
+- budget is adequate for the scope
+- Python scraping (highest priority right now) / automation / AI integration / a small .NET app with a clear scope
 """

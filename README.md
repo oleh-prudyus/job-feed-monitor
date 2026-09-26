@@ -1,23 +1,37 @@
-# useme_bot
+# job-feed-monitor
 
-Моніторить публічну стрічку вакансій на useme.com, оцінює кожну нову вакансію
-LLM-ом за особистими критеріями відсіву, і надсилає збіги в Telegram з
-чернеткою офера. Після схвалення (кнопкою в Telegram) бот сам заповнює й
-надсилає офер на Useme, використовуючи заздалегідь збережену сесію логіну.
+Monitors public freelance job feeds (Useme and Freelancehunt), scores every new listing with an
+LLM against a personal set of vetting criteria, and sends the ones that match to Telegram together
+with a drafted proposal in the listing's own language. You decide from the chat: mark a job as a
+good fit (saved for later) or not a fit. Nothing is ever submitted automatically.
 
-## Компоненти
+## How it works
+
+- On a schedule (Useme: `SCAN_INTERVAL_SECONDS`, default 15 min; Freelancehunt: every 20 min) the feeds
+  are fetched and any listing not seen before is processed.
+- Cheap deterministic checks run first, in code (e.g. platform-specific limits on competing offers,
+  region restrictions), so obviously unsuitable listings never cost an LLM call.
+- The remaining listings are evaluated by Claude or OpenAI against the criteria in
+  `evaluator/criteria.py`. The model returns a verdict, a one-sentence reason and, for matches,
+  a draft proposal.
+- Matches arrive in Telegram as a card with **Good fit / Not a fit** buttons. Saved jobs can be
+  revisited with `/saved`; `/status` shows uptime, last scan and totals.
+- State (which listings were seen and what happened to them) lives in SQLite and survives restarts.
+
+## Components
 
 ```
-scraper/useme_scraper.py     Парсинг публічних стрічок /pl/jobs/ + /en/jobs/ (requests + BeautifulSoup)
-evaluator/llm_evaluator.py   Оцінка вакансії + чернетка офера через Claude/OpenAI
-evaluator/criteria.py        Критерії відсіву/прийняття (окремо від промпту)
-db/state.py                  SQLite: які вакансії вже бачені/оброблені
-bot/telegram_bot.py          Сповіщення + кнопки Схвалити/Редагувати/Відхилити
-submitter/useme_submitter.py Заповнення й відправка форми офера (Playwright)
-scripts/save_session.py      Одноразовий ручний логін -> storage_state.json
+main.py                           Entry point: Telegram bot + scheduled scans in one process
+scraper/useme_scraper.py          Useme feeds, /pl/ and /en/ merged by job id (requests + BeautifulSoup)
+scraper/freelancehunt_scraper.py  Freelancehunt feed (Playwright)
+evaluator/llm_evaluator.py        Listing evaluation + draft proposal via Claude/OpenAI
+evaluator/criteria.py             Vetting criteria, kept separate from the prompt
+db/state.py                       SQLite: which listings were seen / processed
+bot/telegram_bot.py               Notifications, buttons, /saved and /status commands
+scripts/daily_report.py           Optional daily summary sent to Telegram
 ```
 
-## Швидкий старт
+## Quick start
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
@@ -25,46 +39,41 @@ pip install -r requirements.txt
 playwright install chromium
 
 cp .env.example .env
-# заповни TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ANTHROPIC_API_KEY або OPENAI_API_KEY
+# fill in TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID and ANTHROPIC_API_KEY or OPENAI_API_KEY
 
-python3 scripts/save_session.py   # локально, з реальним браузером — один раз
-# скопіюй storage_state.json на сервер, у папку бота
+python3 main.py
 ```
 
-## Деплой на VPS (Docker)
+## Deploying to a VPS (Docker)
 
 ```bash
-# на сервері, поруч з іншими проєктами
-git clone <repo> useme_bot && cd useme_bot
-cp .env.example .env && nano .env   # заповни токени/ключі
+git clone <repo> job-feed-monitor && cd job-feed-monitor
+cp .env.example .env && nano .env   # fill in tokens/keys
 chmod 600 .env
-
-# storage_state.json генерується локально (scripts/save_session.py)
-# і копіюється сюди окремо (scp), в git НЕ комітиться
 
 docker compose up -d --build
 docker compose logs -f
 ```
 
-Бот не займає жодного порту (Telegram-бот працює через вихідне long polling),
-тож не конфліктує з Caddy чи іншими сервісами на сервері.
+The bot opens no ports (Telegram works over outgoing long polling), so it does not conflict with
+other services on the same server. An optional HTTP proxy can be configured through the
+`PROXY_*` variables.
 
 ## Checklist
 
-- [x] Парсинг публічної стрічки вакансій Useme
-- [x] Сканування польської стрічки поряд з англійською (раніше бот бачив лише 5 англомовних вакансій)
-- [x] Без ліміту конкуруючих пропозицій для Useme (є виконані замовлення — конкуренція з новачками більше не блокер)
-- [x] LLM-оцінка вакансій за критеріями відсіву + чернетка офера
-- [x] Telegram-сповіщення з кнопками Схвалити/Редагувати/Відхилити
-- [x] Автоматичне заповнення й надсилання офера (Playwright)
-- [x] Команда `/status` — стан бота й статистика сканувань
-- [x] Деплой на VPS (Docker), персистентна БД
-- [ ] Перший реальний тест підтвердження офера на живій вакансії
-- [ ] Freelancer.com як другий майданчик (опційно)
+- [x] Public feed parsing (Useme, Polish and English feeds merged by job id)
+- [x] Second source: Freelancehunt
+- [x] Deterministic pre-filters in code (competition caps per platform, region restrictions)
+- [x] LLM evaluation against vetting criteria + draft proposal
+- [x] Telegram notifications with Good fit / Not a fit buttons and a `/saved` list
+- [x] `/status` command: uptime, last scan, totals
+- [x] Docker deployment, persistent SQLite state
+- [x] Bot token no longer written to logs (HTTP client logging raised to WARNING)
+- [ ] Freelancehunt scanning is intermittently blocked by Cloudflare (known limitation)
+- [ ] Freelancer.com as a third source (implemented, currently disabled)
 
-## Чому без автологіну
+## Design note: why proposals are never sent automatically
 
-`/en/login/` на Useme захищений Cloudflare-перевіркою на бот-трафік.
-Замість того, щоб намагатись її обходити, бот перевикористовує сесію, яку ти
-створюєш вручну (`scripts/save_session.py`). Коли сесія протухає — бот
-повідомляє в Telegram, і ти повторюєш цей крок.
+Every proposal is sent by a person. The bot's job is to cut the time spent reading listings and
+to prepare a solid first draft, not to apply on someone's behalf: a proposal should reflect a
+human decision that this job is worth taking.

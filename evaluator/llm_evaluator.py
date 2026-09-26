@@ -26,7 +26,7 @@ Good signals:
 Respond ONLY with a JSON object, no other text:
 {{
   "is_match": true/false,
-  "reason": "one sentence in Ukrainian explaining the verdict",
+  "reason": "one sentence in English explaining the verdict",
   "draft_offer": "short offer message written in the exact language named by the 'Listing language' field below, or empty string if is_match is false"
 }}
 

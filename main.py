@@ -1,5 +1,5 @@
 """Entry point: runs the Telegram bot and the periodic feed scans (Useme +
-Freelancer.com) in the same process, using python-telegram-bot's built-in
+Freelancehunt) in the same process, using python-telegram-bot's built-in
 job queue (so there's no need for a second scheduler library running
 alongside it).
 """
@@ -89,14 +89,14 @@ async def _run_scan(context, source_label: str, fetch_fn, meta_prefix: str) -> N
         new_count += 1
 
         if _freelancehunt_region_blocked(job):
-            reason = "Ймовірно доступно лише фрилансерам, зареєстрованим в Україні (валюта UAH)"
+            reason = "Likely restricted to freelancers registered in Ukraine (UAH currency)"
             logger.info("Rejected %s (%s): %s", job.job_id, job.title, reason)
             state.set_status(job.job_id, "rejected_auto", reason=reason)
             continue
 
         cap = _competition_cap(job.url)
         if cap is not None and job.offers_count > cap:
-            reason = f"Забагато конкуруючих пропозицій ({job.offers_count} > {cap} для цієї платформи)"
+            reason = f"Too many competing offers ({job.offers_count} > {cap} for this platform)"
             logger.info("Rejected %s (%s): %s", job.job_id, job.title, reason)
             state.set_status(job.job_id, "rejected_auto", reason=reason)
             continue
