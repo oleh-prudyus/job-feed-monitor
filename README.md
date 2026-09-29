@@ -1,13 +1,13 @@
 # job-feed-monitor
 
-Monitors public freelance job feeds (Useme and Freelancehunt), scores every new listing with an
+Monitors public freelance job feeds (Useme, Freelancehunt and Freelancer.com), scores every new listing with an
 LLM against a personal set of vetting criteria, and sends the ones that match to Telegram together
 with a drafted proposal in the listing's own language. You decide from the chat: mark a job as a
 good fit (saved for later) or not a fit. Nothing is ever submitted automatically.
 
 ## How it works
 
-- On a schedule (Useme: `SCAN_INTERVAL_SECONDS`, default 15 min; Freelancehunt: every 20 min) the feeds
+- On a schedule (Useme: `SCAN_INTERVAL_SECONDS`, default 15 min; Freelancehunt and Freelancer.com: every 20 min) the feeds
   are fetched and any listing not seen before is processed.
 - Cheap deterministic checks run first, in code (e.g. platform-specific limits on competing offers,
   region restrictions), so obviously unsuitable listings never cost an LLM call.
@@ -24,6 +24,7 @@ good fit (saved for later) or not a fit. Nothing is ever submitted automatically
 main.py                           Entry point: Telegram bot + scheduled scans in one process
 scraper/useme_scraper.py          Useme feeds, /pl/ and /en/ merged by job id (requests + BeautifulSoup)
 scraper/freelancehunt_scraper.py  Freelancehunt feed (Playwright)
+scraper/freelancer_scraper.py     Freelancer.com skill-category feeds (Playwright)
 evaluator/llm_evaluator.py        Listing evaluation + draft proposal via Claude/OpenAI
 evaluator/criteria.py             Vetting criteria, kept separate from the prompt
 db/state.py                       SQLite: which listings were seen / processed
@@ -70,7 +71,7 @@ other services on the same server. An optional HTTP proxy can be configured thro
 - [x] Docker deployment, persistent SQLite state
 - [x] Bot token no longer written to logs (HTTP client logging raised to WARNING)
 - [ ] Freelancehunt scanning is intermittently blocked by Cloudflare (known limitation)
-- [ ] Freelancer.com as a third source (implemented, currently disabled)
+- [x] Third source: Freelancer.com
 
 ## Design note: why proposals are never sent automatically
 

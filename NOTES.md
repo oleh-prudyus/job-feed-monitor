@@ -18,10 +18,10 @@ Internal tracker, not part of the public README.
 - [x] Polish feed (`/pl/`) scanned alongside the English one — the English feed alone lists only a
       handful of postings, so the bot had been reporting "0 new" for days
 - [x] Competition cap lifted for Useme (kept for the other platforms)
+- [x] Freelancer.com re-enabled as a third source (2026-09-29, after ID verification passed)
 - [x] Bot token no longer leaks into logs (httpx logs request URLs, and Telegram puts the token in the URL)
 
 ## Remaining
 - [ ] Freelancehunt: intermittently blocked by Cloudflare ("no job cards appeared") — monitoring only
 - [ ] The evaluator only sees the short description shown in the feed, not attachments or the full
       page; long specs (e.g. a linked requirements file) can lead to a wrong "match"
-- [ ] (optional, later) Freelancer.com as a third source
