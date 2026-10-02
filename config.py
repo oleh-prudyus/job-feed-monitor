@@ -19,11 +19,6 @@ SCAN_INTERVAL_SECONDS = int(os.environ.get("SCAN_INTERVAL_SECONDS", "900"))
 # frequent automated visits are more likely to trip -- start conservative.
 FREELANCER_SCAN_INTERVAL_SECONDS = int(os.environ.get("FREELANCER_SCAN_INTERVAL_SECONDS", "1200"))
 
-# Freelancehunt.com also sits behind Cloudflare and needs a full headless-browser
-# render per scan (see scraper/freelancehunt_scraper.py) -- same conservative
-# interval reasoning as Freelancer.com above.
-FREELANCEHUNT_SCAN_INTERVAL_SECONDS = int(os.environ.get("FREELANCEHUNT_SCAN_INTERVAL_SECONDS", "1200"))
-
 # Optional Polish residential/ISP proxy, so all traffic to Useme (scraping and
 # offer submission) matches the country the account was verified in, rather
 # than the VPS's own (German) IP. All requests must go through the same proxy

@@ -1,5 +1,5 @@
-"""Entry point: runs the Telegram bot and the periodic feed scans (Useme,
-Freelancehunt and Freelancer.com) in the same process, using python-telegram-bot's built-in
+"""Entry point: runs the Telegram bot and the periodic feed scans (Useme
+and Freelancer.com) in the same process, using python-telegram-bot's built-in
 job queue (so there's no need for a second scheduler library running
 alongside it).
 """
@@ -8,10 +8,9 @@ import logging
 from datetime import datetime, timezone
 
 from bot.telegram_bot import build_app, notify_job
-from config import FREELANCEHUNT_SCAN_INTERVAL_SECONDS, FREELANCER_SCAN_INTERVAL_SECONDS, SCAN_INTERVAL_SECONDS
+from config import FREELANCER_SCAN_INTERVAL_SECONDS, SCAN_INTERVAL_SECONDS
 from db import state
 from evaluator.llm_evaluator import evaluate
-from scraper.freelancehunt_scraper import fetch_jobs as fetch_freelancehunt_jobs
 from scraper.freelancer_scraper import fetch_jobs as fetch_freelancer_jobs
 from scraper.useme_scraper import fetch_jobs as fetch_useme_jobs
 
@@ -36,7 +35,7 @@ logger = logging.getLogger(__name__)
 # None = no cap. Useme's was 30 while Oleh had zero completed orders; lifted
 # 2026-09-24 once he had delivered work there, since that already sets him apart
 # from the zero-history bidders who make up much of a 50-80 offer pile.
-COMPETITION_CAPS = {"freelancer.com": 100, "useme.com": None, "freelancehunt.com": 60}
+COMPETITION_CAPS = {"freelancer.com": 100, "useme.com": None}
 DEFAULT_COMPETITION_CAP = 30
 
 
@@ -47,29 +46,12 @@ def _competition_cap(url: str) -> int | None:
     return DEFAULT_COMPETITION_CAP
 
 
-def _freelancehunt_region_blocked(job) -> bool:
-    """True if this Freelancehunt listing is very likely restricted to
-    Ukraine-registered accounts, which Oleh's Poland-registered account is not.
-
-    Confirmed live: a listing with no fixed budget on its card ("Nie podano")
-    was posted with the client's own currency, UAH -- attempting to bid threw
-    "Projects in UAH (Ukrainian hryvnia) are available to freelancers
-    registered in Ukraine". Checked two "Nie podano" listings, both UAH-only.
-    A listing WITH a fixed PLN budget on the card (e.g. "676 PLN") was postable
-    normally -- the project's own currency is what gates bidding, not what
-    currency individual freelancers write their counter-offers in (those varied
-    regardless). Card-level budget_text is the only signal available without
-    opening every listing's page, so this is a heuristic, not a certainty.
-    """
-    return "freelancehunt.com" in job.url and job.budget_text.strip() == "Nie podano"
-
-
 async def _run_scan(context, source_label: str, fetch_fn, meta_prefix: str) -> None:
     meta_at, meta_ok, meta_count = f"{meta_prefix}_at", f"{meta_prefix}_ok", f"{meta_prefix}_new_count"
     state.set_meta(meta_at, datetime.now(timezone.utc).isoformat(timespec="seconds"))
 
     try:
-        # Both scrapers use Playwright's sync API internally, which refuses to run in a
+        # The browser-based scrapers use Playwright's sync API internally, which refuses to run in a
         # thread that already has an asyncio event loop -- and this whole function runs
         # inside python-telegram-bot's loop. A plain worker thread sidesteps that.
         jobs = await asyncio.to_thread(fetch_fn)
@@ -85,12 +67,6 @@ async def _run_scan(context, source_label: str, fetch_fn, meta_prefix: str) -> N
             continue
         state.mark_seen(job.job_id, job.title, job.url)
         new_count += 1
-
-        if _freelancehunt_region_blocked(job):
-            reason = "Likely restricted to freelancers registered in Ukraine (UAH currency)"
-            logger.info("Rejected %s (%s): %s", job.job_id, job.title, reason)
-            state.set_status(job.job_id, "rejected_auto", reason=reason)
-            continue
 
         cap = _competition_cap(job.url)
         if cap is not None and job.offers_count > cap:
@@ -127,10 +103,6 @@ async def scan_job(context) -> None:
     await _run_scan(context, "Useme", fetch_useme_jobs, "last_scan")
 
 
-async def scan_freelancehunt_job(context) -> None:
-    await _run_scan(context, "Freelancehunt", fetch_freelancehunt_jobs, "freelancehunt_last_scan")
-
-
 async def scan_freelancer_job(context) -> None:
     await _run_scan(context, "Freelancer", fetch_freelancer_jobs, "freelancer_last_scan")
 
@@ -139,12 +111,10 @@ def main() -> None:
     app = build_app()
     state.set_meta("bot_started_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
     app.job_queue.run_repeating(scan_job, interval=SCAN_INTERVAL_SECONDS, first=5)
-    app.job_queue.run_repeating(scan_freelancehunt_job, interval=FREELANCEHUNT_SCAN_INTERVAL_SECONDS, first=15)
     app.job_queue.run_repeating(scan_freelancer_job, interval=FREELANCER_SCAN_INTERVAL_SECONDS, first=25)
     logger.info(
-        "Starting bot, scanning Useme every %ds, Freelancehunt every %ds and Freelancer every %ds",
+        "Starting bot, scanning Useme every %ds and Freelancer every %ds",
         SCAN_INTERVAL_SECONDS,
-        FREELANCEHUNT_SCAN_INTERVAL_SECONDS,
         FREELANCER_SCAN_INTERVAL_SECONDS,
     )
     app.run_polling()
