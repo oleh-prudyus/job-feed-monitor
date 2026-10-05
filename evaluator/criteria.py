@@ -4,7 +4,11 @@ tweak without touching the LLM-calling code.
 
 SKILLS = """
 - Python: web scraping (Requests/BeautifulSoup, Playwright), pandas, FastAPI, automation, AI API integration (Claude/OpenAI) -- this is the main focus right now
-- C#/.NET: can build real projects (confirmed skill, not just theory)
+- Document/data processing in Python: PDF -> Excel/CSV/text (pdfplumber, PyMuPDF, fillable-form fields,
+  OCR with Tesseract), Excel automation (openpyxl, pandas), CSV/Excel cleaning, dedup and normalisation
+- Small tools/UIs: Streamlit apps, Telegram bots, scheduled monitors with notifications
+- C#/.NET: can build real projects (confirmed skill, not just theory) -- console tools, WinForms/WPF,
+  .NET MAUI, ASP.NET APIs, fixing bugs in existing .NET apps
 - NOT ready yet for cybersecurity/security-audit work (still building up university coursework + English) --
   do not treat "security audit / hardening / OSINT" listings as a good fit for now, reject them like any
   other out-of-scope listing even though this is a longer-term direction later
@@ -21,6 +25,13 @@ by the model). Judge remaining listings on fit/scope/legitimacy, not bid count.
 - budget does not match scope (e.g. many records for a tiny budget)
 - requires experience Oleh does not have (SAP, ERP, niche enterprise stacks, "US-native only")
 - suspected illegal or unethical purpose
+- bypassing captchas / anti-bot systems, or automating logins to other people's accounts (Google,
+  WhatsApp, LinkedIn, the client's own Upwork inbox), anti-detect browsers, bulk account creation
+- pure manual retyping with no room for automation (handwriting, "type it by hand")
+- workload over 30 hrs/week or long-term full-time roles; "Senior"/"Expert-only" roles requiring years of
+  commercial experience or case studies
+- main language is not Python or C# (Node.js-only, PHP, MQL, no-code-only like n8n/Make/GHL)
+- sales, cold calling, virtual assistant, copywriting, or generic data entry roles
 - client is clearly already choosing (Interviewing >= 3, Invites sent >= 10)
 - spam pattern: the same author posts several near-identical listings in different variations (language, field) with an inflated budget and an empty description
 """
@@ -29,4 +40,8 @@ ACCEPT_SIGNALS = """
 - one clear site/task -> concrete fields/deliverable -> clear output format
 - budget is adequate for the scope
 - Python scraping (highest priority right now) / automation / AI integration / a small .NET app with a clear scope
+- PDF/Excel/CSV extraction or cleaning that can be scripted (even if the listing says "data entry",
+  accept it when the source is digital and the job is really extraction + validation)
+- small, low-budget but clearly scoped jobs are welcome: the account has no reviews yet, so a quick
+  first review matters more than the amount
 """

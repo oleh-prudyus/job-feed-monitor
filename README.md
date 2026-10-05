@@ -70,6 +70,8 @@ other services on the same server. An optional HTTP proxy can be configured thro
 - [x] Second source: Freelancer.com
 - [x] Freelancehunt source removed (2026-10-02): its projects are open only to accounts
       registered in Ukraine, so a Poland-based account can't bid there
+- [x] Vetting criteria updated (2026-10-05): PDF/Excel/CSV processing, Streamlit, Telegram bots and
+      .NET desktop now count as a fit; captcha/login automation, 30+ hrs/week and non-Python/C# jobs rejected
 
 ## Design note: why proposals are never sent automatically
 
